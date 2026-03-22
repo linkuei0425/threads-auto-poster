@@ -8,9 +8,9 @@ from google import genai
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 旅遊通清單 (已加入曼谷通)
+# 2. 八大旅遊通資料 (已加入曼谷通)
 CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰國美食", "url": "https://linkuei0425.github.io/Bangkok/"},
+    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
     {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "url": "https://linkuei0425.github.io/Seoul/"},
     {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "url": "https://linkuei0425.github.io/Busan/"},
@@ -22,17 +22,17 @@ CITIES = [
 
 def run():
     try:
-        # 使用 Google 最新版 Client，會自動走 v1 正式版路徑
+        # 使用 Google 最新 SDK 語法
         client = genai.Client(api_key=GEMINI_KEY)
         
         target = random.choice(CITIES)
-        print(f"📡 正在處理：{target['name']}...")
+        print(f"🎲 正在處理：【{target['name']}】...")
 
         prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         
-        # 這裡不加 models/ 前綴，直接寫名字
+        # 關鍵：使用 Image 7 驗證成功的 2.0 Flash
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.0-flash',
             contents=prompt
         )
         
@@ -50,11 +50,11 @@ def run():
             })
             print(f"✅ 【{target['name']}】發布成功！")
         else:
-            print(f"❌ Threads API 錯誤：{res}")
+            print(f"❌ Threads 錯誤：{res}")
             sys.exit(1)
 
     except Exception as e:
-        print(f"💥 運行異常：{e}")
+        print(f"💥 發生錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
