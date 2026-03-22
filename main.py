@@ -2,7 +2,6 @@ import os
 import random
 import requests
 import sys
-import time
 from google import genai
 
 # 1. 讀取 Secrets
@@ -22,53 +21,33 @@ CITIES = [
 ]
 
 def run():
-    if not GEMINI_KEY or not THREADS_TOKEN:
-        print("❌ 錯誤：找不到 API Key 或 Token。")
-        sys.exit(1)
+    try:
+        client = genai.Client(api_key=GEMINI_KEY)
+        target = random.choice(CITIES)
+        print(f"🎲 準備為【{target['name']}】生成文案...")
 
-    client = genai.Client(api_key=GEMINI_KEY)
-    target = random.choice(CITIES)
-    print(f"🎲 挑選城市：【{target['name']}】")
+        # 這裡一定要用 2.0-flash，因為 Image 14 證明這名字你可用
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
+        )
+        
+        # 3. 發布到 Threads
+        res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
+            'media_type': 'TEXT', 'text': response.text, 'access_token': THREADS_TOKEN
+        }).json()
+        
+        if 'id' in res:
+            requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
+                'creation_id': res['id'], 'access_token': THREADS_TOKEN
+            })
+            print(f"✅ 【{target['name']}】發布成功！")
+        else:
+            print(f"❌ Threads API 拒絕發文：{res}")
+            sys.exit(1)
 
-    prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
-
-    # --- 模型自動切換邏輯 (避開 429 額度問題) ---
-    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash']
-    content = None
-
-    for model_name in models_to_try:
-        try:
-            print(f"🤖 嘗試使用模型：{model_name}...")
-            response = client.models.generate_content(model=model_name, contents=prompt)
-            if response.text:
-                content = response.text
-                print(f"✅ 模型 {model_name} 生成成功！")
-                break
-        except Exception as e:
-            if "429" in str(e):
-                print(f"⚠️ {model_name} 額度滿了，切換下一個...")
-                continue
-            else:
-                print(f"💥 發生非預期錯誤：{e}")
-                sys.exit(1)
-
-    if not content:
-        print("❌ 抱歉，所有的模型額度都用完了。請等 10 分鐘後再手動測試。")
-        sys.exit(1)
-
-    # 3. 發布到 Threads
-    print("📤 正在發布到 Threads...")
-    res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-        'media_type': 'TEXT', 'text': content, 'access_token': THREADS_TOKEN
-    }).json()
-    
-    if 'id' in res:
-        requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
-            'creation_id': res['id'], 'access_token': THREADS_TOKEN
-        })
-        print(f"🎉 【{target['name']}】發布成功！")
-    else:
-        print(f"❌ Threads 錯誤：{res}")
+    except Exception as e:
+        print(f"💥 發生錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
