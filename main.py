@@ -8,7 +8,7 @@ from google import genai
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 八大旅遊通資料 (已加入曼谷通)
+# 2. 八大旅遊通資料 (包含曼谷通)
 CITIES = [
     {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
@@ -22,35 +22,28 @@ CITIES = [
 
 def run():
     try:
-        # 使用 Google 最新 SDK 語法
         client = genai.Client(api_key=GEMINI_KEY)
-        
         target = random.choice(CITIES)
-        print(f"🎲 正在處理：【{target['name']}】...")
+        print(f"🎲 準備為【{target['name']}】生成文案...")
 
-        prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
-        
-        # 關鍵：使用 Image 7 驗證成功的 2.0 Flash
+        # 這裡一定要用 2.0-flash，因為 Image 14 證明這名字你可用
         response = client.models.generate_content(
             model='gemini-2.0-flash',
-            contents=prompt
+            contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         )
         
         # 3. 發布到 Threads
         res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'TEXT',
-            'text': response.text,
-            'access_token': THREADS_TOKEN
+            'media_type': 'TEXT', 'text': response.text, 'access_token': THREADS_TOKEN
         }).json()
         
         if 'id' in res:
             requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
-                'creation_id': res['id'],
-                'access_token': THREADS_TOKEN
+                'creation_id': res['id'], 'access_token': THREADS_TOKEN
             })
             print(f"✅ 【{target['name']}】發布成功！")
         else:
-            print(f"❌ Threads 錯誤：{res}")
+            print(f"❌ Threads API 拒絕發文：{res}")
             sys.exit(1)
 
     except Exception as e:
