@@ -1,34 +1,23 @@
 name: Threads Auto Poster
 
-# 設定什麼時候要執行
 on:
   schedule:
-    # 這裡使用的是 UTC 時間，'0 1 * * *' 代表每天 UTC 01:00
-    # 換算成台灣時間是「每天早上 09:00」自動發文
-    - cron: '0 1 * * *'
-  
-  # 這個設定會讓你的 GitHub 介面出現一個「Run workflow」按鈕，方便你隨時手動測試
-  workflow_dispatch: 
+    - cron: '0 1 * * *' # 每天台灣時間 09:00 自動執行
+  workflow_dispatch: # 支援手動按按鈕執行測試
 
 jobs:
-  build:
-    runs-on: ubuntu-latest # 使用 GitHub 提供的免費 Linux 伺服器
+  run-poster:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3 # 把你的程式碼從 GitHub 抓到伺服器上
-
-      - name: Set up Python
+      - uses: actions/checkout@v3
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9' # 安裝 Python 環境
-
+          python-version: '3.9'
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt # 根據清單安裝 Gemini 和 Requests 工具
-
-      - name: Run script
-        # 這裡是最關鍵的：把我們存好的 Secrets 餵給程式碼當變數
+        run: pip install -r requirements.txt
+      - name: Start Post
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-        run: python main.py # 正式執行發文程式
+        run: python main.py
