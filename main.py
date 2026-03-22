@@ -21,7 +21,7 @@ CITIES = [
 
 def run():
     try:
-        # 使用最新的 Client 寫法
+        # 使用最新的寫法
         client = genai.Client(api_key=GEMINI_KEY)
         
         target = random.choice(CITIES)
@@ -29,7 +29,7 @@ def run():
 
         prompt = f"你是一位活潑的旅遊領隊。請為『{target['name']}』寫一段 80 字內的 Threads 貼文，主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         
-        # 使用最新 2.0 模型與調用方式
+        # 使用最新 2.0 模型
         response = client.models.generate_content(
             model='gemini-2.0-flash', 
             contents=prompt
@@ -57,3 +57,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+
