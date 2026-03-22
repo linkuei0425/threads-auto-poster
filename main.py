@@ -2,12 +2,18 @@ import os
 import random
 import requests
 import google.generativeai as genai
+import sys
 
-# 1. 讀取 Secrets 鑰匙
+# 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 7 大城市旅遊通 (隨機發文清單)
+# 檢查變數是否存在，不存在就直接報錯
+if not GEMINI_KEY or not THREADS_TOKEN:
+    print("❌ 錯誤：找不到 API Key 或 Token，請檢查 GitHub Secrets 的名稱是否正確。")
+    sys.exit(1)
+
+# 2. 7 大城市清單
 CITIES = [
     {"name": "曼谷通", "topic": "曼谷按摩、考山路與夜市", "url": "https://linkuei0425.github.io/BANGKOK/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
@@ -16,18 +22,26 @@ CITIES = [
     {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "url": "https://linkuei0425.github.io/Okinawa/"},
     {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "url": "https://linkuei0425.github.io/Singapore/"},
     {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "url": "https://linkuei0425.github.io/FUKUOKA/"},
- {"name": "京．阪．神通", "topic": "京都花見小路、大阪心齋橋逛街", "url": "https://linkuei0425.github.io/Osaka/"}
+    {"name": "京．阪．神通", "topic": "京都花見小路、大阪心齋橋逛街", "url": "https://linkuei0425.github.io/Osaka/"}
 ]
 
-# 3. 設定 Gemini 2.0 Flash
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
-
-def generate_and_post():
+def run_poster():
     try:
+        # 3. 設定 Gemini 
+        genai.configure(api_key=GEMINI_KEY)
+        
+        # 自動嘗試不同模型名稱，防止 404 (嘗試 2.0 Flash 或 1.5 Flash)
+        try:
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            print("🤖 使用模型：Gemini 2.0 Flash")
+        except:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            print("🤖 使用模型：Gemini 1.5 Flash (備援)")
+
         target = random.choice(CITIES)
-        print(f"🚀 正在為【{target['name']}】準備文案...")
-        prompt = f"你是一位風趣的旅遊達人。請為『{target['name']}』寫一段 80 字內的 Threads 貼文，主題是：{target['topic']}。必須包含網址 {target['url']} 並多加 Emoji，結尾加 #旅遊 #自由行。"
+        print(f"🎲 挑選城市：{target['name']}")
+
+        prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文，主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         
         response = model.generate_content(prompt)
         content = response.text
@@ -42,11 +56,14 @@ def generate_and_post():
             publish = requests.post(f"{base_url}/threads_publish", params={
                 'creation_id': res['id'], 'access_token': THREADS_TOKEN
             }).json()
-            print(f"✅ 【{target['name']}】發布成功！")
+            print(f"✅ 【{target['name']}】發布成功！貼文 ID: {publish.get('id')}")
         else:
             print(f"❌ Threads API 錯誤：{res}")
+            sys.exit(1) # 強制報錯讓 Actions 顯示紅色，方便查日誌
+
     except Exception as e:
-        print(f"❌ 發生錯誤：{e}")
+        print(f"💥 發生嚴重錯誤：{e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    generate_and_post()
+    run_poster()
