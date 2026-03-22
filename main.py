@@ -2,13 +2,13 @@ import os
 import random
 import requests
 import sys
-from google import genai # 注意：這是新版 SDK
+from google import genai
 
-# 1. 讀取 Secrets
+# 1. 讀取金鑰
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 八大旅遊通資料 (已加入曼谷通)
+# 2. 八大旅遊通資料 (包含曼谷)
 CITIES = [
     {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
@@ -22,7 +22,7 @@ CITIES = [
 
 def run():
     try:
-        # 3. 使用 Google 2.0 最新語法 (Client 模式)
+        # 使用 Google 最新 SDK 
         client = genai.Client(api_key=GEMINI_KEY)
         
         target = random.choice(CITIES)
@@ -30,15 +30,15 @@ def run():
 
         prompt = f"你是一位活潑的旅遊領隊。請為『{target['name']}』寫一段 80 字內的 Threads 貼文，主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         
-        # 使用最新的 2.0 Flash 模型
+        # 改用 1.5-flash，它的免費額度通常比較穩，不會一直 429
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=prompt
         )
         
         content = response.text
 
-        # 4. 發布到 Threads
+        # 3. 發布到 Threads
         res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
             'media_type': 'TEXT',
             'text': content,
@@ -57,6 +57,7 @@ def run():
 
     except Exception as e:
         print(f"💥 發生錯誤：{e}")
+        # 如果是額度問題，我們會在這裡看到提示
         sys.exit(1)
 
 if __name__ == "__main__":
