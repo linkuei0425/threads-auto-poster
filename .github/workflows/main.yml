@@ -1,8 +1,6 @@
 name: Threads Auto Poster
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 1 * * *' # 台灣時間 09:00
 jobs:
   post:
     runs-on: ubuntu-latest
