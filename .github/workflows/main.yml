@@ -1,10 +1,8 @@
 name: Threads Auto Poster
-
 on:
   schedule:
-    - cron: '0 1 * * *' # 每天台灣時間 09:00 自動執行
-  workflow_dispatch: # 支援手動按按鈕執行測試
-
+    - cron: '0 1 * * *' 
+  workflow_dispatch: 
 jobs:
   run-poster:
     runs-on: ubuntu-latest
