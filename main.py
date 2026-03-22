@@ -8,14 +8,9 @@ import sys
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 檢查變數是否存在，不存在就直接報錯
-if not GEMINI_KEY or not THREADS_TOKEN:
-    print("❌ 錯誤：找不到 API Key 或 Token，請檢查 GitHub Secrets 的名稱是否正確。")
-    sys.exit(1)
-
-# 2. 7 大城市清單
+# 2. 7 大城市旅遊通
 CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與夜市", "url": "https://linkuei0425.github.io/BANGKOK/"},
+   {"name": "曼谷通", "topic": "曼谷按摩、考山路與夜市", "url": "https://linkuei0425.github.io/BANGKOK/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
     {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "url": "https://linkuei0425.github.io/Seoul/"},
     {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "url": "https://linkuei0425.github.io/Busan/"},
@@ -25,45 +20,49 @@ CITIES = [
     {"name": "京．阪．神通", "topic": "京都花見小路、大阪心齋橋逛街", "url": "https://linkuei0425.github.io/Osaka/"}
 ]
 
-def run_poster():
+def run():
     try:
-        # 3. 設定 Gemini 
         genai.configure(api_key=GEMINI_KEY)
         
-        # 自動嘗試不同模型名稱，防止 404 (嘗試 2.0 Flash 或 1.5 Flash)
-        try:
-            model = genai.GenerativeModel('gemini-2.0-flash')
-            print("🤖 使用模型：Gemini 2.0 Flash")
-        except:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            print("🤖 使用模型：Gemini 1.5 Flash (備援)")
+        # 【核心修正】自動尋找可用的模型名稱
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        print(f"✅ 你的帳號可用模型列表: {available_models}")
+        
+        # 優先順序：2.0 Flash -> 1.5 Pro -> 1.5 Flash -> 隨便一個能用的
+        selected_model = ""
+        for preferred in ['models/gemini-2.0-flash', 'models/gemini-1.5-pro', 'models/gemini-1.5-flash']:
+            if preferred in available_models:
+                selected_model = preferred
+                break
+        if not selected_model:
+            selected_model = available_models[0]
+            
+        print(f"🎯 最終決定使用：{selected_model}")
+        model = genai.GenerativeModel(selected_model)
 
+        # 隨機選城市寫文案
         target = random.choice(CITIES)
-        print(f"🎲 挑選城市：{target['name']}")
-
-        prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文，主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
+        prompt = f"你是一位活潑的旅遊領隊。請為『{target['name']}』寫一段 80 字內的 Threads 旅遊貼文，主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         
         response = model.generate_content(prompt)
-        content = response.text
-
-        # 4. 發布到 Threads
-        base_url = "https://graph.threads.net/v1.0/me"
-        res = requests.post(f"{base_url}/threads", params={
-            'media_type': 'TEXT', 'text': content, 'access_token': THREADS_TOKEN
+        
+        # Threads 發文
+        res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
+            'media_type': 'TEXT', 'text': response.text, 'access_token': THREADS_TOKEN
         }).json()
         
         if 'id' in res:
-            publish = requests.post(f"{base_url}/threads_publish", params={
+            requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                 'creation_id': res['id'], 'access_token': THREADS_TOKEN
-            }).json()
-            print(f"✅ 【{target['name']}】發布成功！貼文 ID: {publish.get('id')}")
+            })
+            print(f"🚀 【{target['name']}】發布成功！")
         else:
-            print(f"❌ Threads API 錯誤：{res}")
-            sys.exit(1) # 強制報錯讓 Actions 顯示紅色，方便查日誌
+            print(f"❌ Threads 錯誤：{res}")
+            sys.exit(1)
 
     except Exception as e:
-        print(f"💥 發生嚴重錯誤：{e}")
+        print(f"💥 發生錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    run_poster()
+    run()
