@@ -8,9 +8,8 @@ import sys
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 八大旅遊通資料 (依據你的截圖修正網址)
+# 2. 七大旅遊通資料 (依據你的截圖修正網址)
 CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與夜市", "url": "https://linkuei0425.github.io/BANGKOK/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
     {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "url": "https://linkuei0425.github.io/Seoul/"},
     {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "url": "https://linkuei0425.github.io/Busan/"},
