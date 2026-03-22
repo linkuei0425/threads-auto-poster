@@ -4,7 +4,6 @@ import requests
 import sys
 import time
 from google import genai
-from google.api_core import exceptions
 
 # 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
@@ -23,33 +22,42 @@ CITIES = [
 ]
 
 def run():
+    if not GEMINI_KEY or not THREADS_TOKEN:
+        print("❌ 錯誤：找不到 API Key 或 Token。")
+        sys.exit(1)
+
     client = genai.Client(api_key=GEMINI_KEY)
     target = random.choice(CITIES)
-    print(f"🎲 準備處理：【{target['name']}】...")
+    print(f"🎲 挑選城市：【{target['name']}】")
 
     prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
 
-    # --- 自動排隊功能 (Retry Logic) ---
-    for i in range(3): # 最多嘗試 3 次
+    # --- 模型自動切換邏輯 (避開 429 額度問題) ---
+    models_to_try = ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-2.0-flash']
+    content = None
+
+    for model_name in models_to_try:
         try:
-            response = client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=prompt
-            )
-            content = response.text
-            break # 成功就跳出迴圈
+            print(f"🤖 嘗試使用模型：{model_name}...")
+            response = client.models.generate_content(model=model_name, contents=prompt)
+            if response.text:
+                content = response.text
+                print(f"✅ 模型 {model_name} 生成成功！")
+                break
         except Exception as e:
             if "429" in str(e):
-                print(f"⚠️ Google 說額度滿了，正在自動倒數 35 秒 (第 {i+1} 次嘗試)...")
-                time.sleep(35) # 聽 Google 的話，等 35 秒
+                print(f"⚠️ {model_name} 額度滿了，切換下一個...")
+                continue
             else:
                 print(f"💥 發生非預期錯誤：{e}")
                 sys.exit(1)
-    else:
-        print("❌ 嘗試次數過多，請 10 分鐘後再手動執行。")
+
+    if not content:
+        print("❌ 抱歉，所有的模型額度都用完了。請等 10 分鐘後再手動測試。")
         sys.exit(1)
 
     # 3. 發布到 Threads
+    print("📤 正在發布到 Threads...")
     res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
         'media_type': 'TEXT', 'text': content, 'access_token': THREADS_TOKEN
     }).json()
@@ -58,7 +66,7 @@ def run():
         requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
             'creation_id': res['id'], 'access_token': THREADS_TOKEN
         })
-        print(f"✅ 【{target['name']}】發布成功！")
+        print(f"🎉 【{target['name']}】發布成功！")
     else:
         print(f"❌ Threads 錯誤：{res}")
         sys.exit(1)
