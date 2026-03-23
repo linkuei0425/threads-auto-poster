@@ -2,6 +2,7 @@ import os
 import random
 import requests
 import sys
+import time  # ⏳ 新增時間模組
 from google import genai
 
 # 1. 讀取 Secrets
@@ -25,7 +26,6 @@ def run():
         target = random.choice(CITIES)
         print(f"🎲 準備為【{target['name']}】生成文案...")
 
-        # 嚴格限制字數的提示詞
         prompt = f"""
         你是一位充滿熱情且專業的旅遊部落客。請為『{target['name']}』寫一篇 Threads 貼文。
         主題是：{target['topic']}。
@@ -34,7 +34,7 @@ def run():
         2. 善用生動的描述、適當的空行排版與 Emoji。
         3. 結尾必須有一個互動問句引導留言。
         4. 加上標籤 #旅遊 #自由行 #{target['name']}。
-        5. 絕對不要在正文中包含任何網址連結！只要說「完整攻略請看一樓留言」即可。
+        5. 絕對不要在正文中包含任何網址連結！只要說「完整攻略請看一樓留言👇」即可。
         """
         
         response = client.models.generate_content(
@@ -44,9 +44,7 @@ def run():
         
         main_text = response.text.strip()
         
-        # 🛡️ 字數保險絲：如果超過 480 字，強制截斷並加上刪節號，絕對不讓 Threads 報錯
         if len(main_text) > 480:
-            print("⚠️ 警告：AI 生成字數過多，觸發強制截斷防護！")
             main_text = main_text[:470] + "...\n\n(完整攻略請看一樓留言👇)"
 
         # 📤 1. 建立主貼文
@@ -64,9 +62,18 @@ def run():
                 'access_token': THREADS_TOKEN
             }).json()
             main_post_id = publish_main.get('id')
+            
+            if not main_post_id:
+                print(f"❌ 主貼文發布失敗：{publish_main}")
+                sys.exit(1)
+                
             print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
             
-            # 📤 2. 在主貼文底下建立留言（放連結）
+            # ⏳ 關鍵修正：煞車等 5 秒，讓 Threads 伺服器建檔
+            print("⏳ 等待 5 秒鐘，讓系統準備留言區...")
+            time.sleep(5)
+            
+            # 📤 2. 在主貼文底下建立留言
             print("📤 2. 正在留言區發布專屬連結...")
             reply_text = f"👇 專屬你的【{target['name']}】完整攻略與私房行程表，我整理在這邊了：\n{target['url']}"
             
@@ -79,13 +86,17 @@ def run():
             
             if 'id' in res_reply:
                 # 發布留言
-                requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
+                publish_reply = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                     'creation_id': res_reply['id'], 
                     'access_token': THREADS_TOKEN
-                })
-                print(f"🎉 留言連結發布成功！排版完美！")
+                }).json()
+                
+                if 'id' in publish_reply:
+                    print(f"🎉 留言連結發布成功！排版完美！")
+                else:
+                    print(f"❌ 留言【發布】失敗：{publish_reply}")
             else:
-                print(f"❌ 建立留言回覆失敗：{res_reply}")
+                print(f"❌ 留言【建立】失敗：{res_reply}")
         else:
             print(f"❌ 建立主貼文失敗：{res_main}")
             sys.exit(1)
