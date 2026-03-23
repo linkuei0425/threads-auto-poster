@@ -37,7 +37,7 @@ def run():
         
         # 修正：使用完整型號名稱 imagen-3.0-generate-001
         img_res = client.models.generate_images(
-            model='imagen-4.0-generate-001', 
+            model='imagen-3.0-generate-001', 
             prompt=image_prompt,
             config={
                 "number_of_images": 1,
