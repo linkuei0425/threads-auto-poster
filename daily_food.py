@@ -20,12 +20,12 @@ def run():
     try:
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # --- A. Gemini 2.0 寫文案 + 寫繪圖咒語 ---
+        # --- A. Gemini 2.5 寫文案 + 寫繪圖咒語 ---
         print("🤖 Gemini 正在構思今日美食主題...")
         task_prompt = "你是頂級美食博主。任務：1.隨機挑選一個全球美食主題。2.寫一段60字Threads貼文(中文)。3.寫一段該美食的英文繪圖咒語(Image Prompt)，要求極致美味感、專業攝影、8k。請用 '---' 分隔貼文與咒語。"
         
-        # 既然你說 2.0 沒問題，我們就用 2.0
-        res = client.models.generate_content(model='gemini-2.0-flash', contents=task_prompt)
+        # 既然你說 2.5 沒問題，我們就用 2.5
+        res = client.models.generate_content(model='gemini-2.5-flash', contents=task_prompt)
         parts = res.text.split('---')
         caption = parts[0].strip()
         image_prompt = parts[1].strip() if len(parts) > 1 else "Professional food photography"
