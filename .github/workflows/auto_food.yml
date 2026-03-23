@@ -1,4 +1,4 @@
-name: 🍴 中午小編 (Gemini 2.5 留言分離版)
+name: 🍴 中午小編 (Gemini 2.5 留言分離版 - GitHub 智慧等待版)
 
 on:
   workflow_dispatch:
@@ -22,6 +22,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python daily_food.py
+        
       - name: Push Image to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
@@ -29,8 +30,25 @@ jobs:
           git add images/food/*.jpg
           git commit -m "Update Food Image" || echo "No changes"
           git push
-      - name: Wait for CDN
-        run: sleep 90 # 建議拉長到 90 秒，確保 GitHub Pages 圖片已上線
+
+      - name: Wait for GitHub Pages to Deploy
+        run: |
+          IMG_NAME=$(cat img_name.txt)
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
+          echo "🔍 正在等待圖片上線：$IMG_URL"
+          
+          # 智慧等待迴圈：最多重試 20 次，每次等 15 秒 (最長 5 分鐘)
+          for i in {1..20}; do
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
+            if [ "$HTTP_STATUS" == "200" ]; then
+              echo "✅ 圖片已成功上線！"
+              break
+            fi
+            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+            sleep 15
+          done
+          # 再多等 5 秒確保快取更新
+          sleep 5
 
       - name: Post Main and Reply
         env:
@@ -39,9 +57,8 @@ jobs:
           IMG_NAME=$(cat img_name.txt)
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
-          # 1. 發布主貼文 (圖 + 400字)
+          # 1. 發布主貼文 (圖 + 文)
           echo "📤 正在建立主文容器..."
-          # 💡 優化：使用 text@caption.txt 讓 curl 直接安全地讀取檔案內容
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=IMAGE" \
             --data-urlencode "image_url=$IMG_URL" \
@@ -59,7 +76,6 @@ jobs:
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           
-          # 💡 優化：檢查主文是否真的發布成功
           if [ "$POST_ID" == "null" ] || [ -z "$POST_ID" ]; then 
             echo "❌ 主文發布失敗：$PUBLISH_RES"
             exit 1
@@ -69,7 +85,6 @@ jobs:
           # 2. 發布地址留言 (回覆該主文)
           sleep 10
           echo "📤 正在建立地址留言容器..."
-          # 💡 優化：使用 text@comment.txt 讓 curl 直接安全地讀取檔案內容
           RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
             --data-urlencode text@comment.txt \
