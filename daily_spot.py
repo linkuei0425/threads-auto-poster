@@ -23,13 +23,19 @@ def run():
             f"1. 從以下城市中『隨機挑選一個』：{target_cities}。\n"
             f"2. 挑選該城市中一個『真實存在』的知名地標、私房秘境或絕美打卡景點（請勿介紹餐廳或美食）。\n"
             f"3. 撰寫一段 Threads 貼文主文（中文）。以第一人稱（Kokko）分享，描述風景特色與旅遊當下的感動，語氣生動熱情，多用符合情境的 Emoji。\n"
-            f"⚠️ 極度重要：主文字數（含標點符號與Emoji）『絕對不可以超過 350 字』！\n"
+            f"⚠️ 排版規定：段落與段落之間『必須空一行』！請多利用短句，絕對不要把文字全部擠成一團！\n"
+            f"⚠️ 字數規定：主文字數（含標點符號與Emoji）『絕對不可以超過 350 字』！\n"
             f"4. 撰寫一段該景點的英文繪圖咒語 (Image Prompt)，風格必須是高畫質風景攝影 (high-quality landscape photography)、光影唯美、構圖大氣。\n"
             f"5. 撰寫一條給『自由行旅客』的專屬留言內容。格式為：\n"
             f"『📍 景點名稱：XXX\n"
             f"📍 所在城市：XXX\n"
-            f"📍 詳細地址：XXX\n"
-            f"🚆 自由行交通攻略：[請詳細說明具體搭乘的地鐵線/公車、下車站名、幾號出口，以及步行時間等詳細指引]』。\n"
+            f"📍 詳細地址：XXX\n\n"
+            f"🚆 自由行交通攻略：\n"
+            f"[請條列式說明，例如：\n"
+            f"1️⃣ 搭乘ＯＯ線至ＯＯ站\n"
+            f"2️⃣ 從Ｘ號出口出站\n"
+            f"3️⃣ 步行約Ｘ分鐘即可抵達]\n"
+            f"⚠️ 留言排版規定：交通攻略請務必『條列式分行』撰寫，保持清晰易讀！』\n"
             f"請嚴格使用 '---' 分隔這三部分（主文---咒語---留言內容）。"
         )
         
@@ -63,11 +69,10 @@ def run():
         img_name = f"spot_{int(time.time())}.jpg"
         img_dir = "images/spot"
         
-        # 💡 終極資料夾防護機制：如果是不小心建錯的「檔案」，就強制刪除
         if os.path.exists(img_dir) and not os.path.isdir(img_dir):
             print(f"⚠️ 發現同名檔案，正在清空以建立正確的資料夾...")
             os.remove(img_dir)
-        os.makedirs(img_dir, exist_ok=True) # 安心建立資料夾
+        os.makedirs(img_dir, exist_ok=True)
         
         local_img_path = f"{img_dir}/{img_name}"
         
