@@ -53,3 +53,29 @@ def run():
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
                 image_config=types.ImageConfig(aspect_ratio="1:1")
+            )
+        )
+        
+        img_name = f"food_{int(time.time())}.jpg"
+        img_dir = "images/food"
+        os.makedirs(img_dir, exist_ok=True)
+        local_img_path = f"{img_dir}/{img_name}"
+        
+        for part in img_res.parts:
+            if part.inline_data:
+                part.as_image().save(local_img_path)
+                break
+                
+        # --- C. 寫入暫存檔 ---
+        with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_name)
+        with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
+        with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment_text)
+            
+        print(f"✅ Python 任務完成！主文字數：{len(caption)}")
+
+    except Exception as e:
+        print(f"💥 發生錯誤：{e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    run()
