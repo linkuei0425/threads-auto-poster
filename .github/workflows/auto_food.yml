@@ -30,7 +30,7 @@ jobs:
           git commit -m "Update Food Image" || echo "No changes"
           git push
       - name: Wait for CDN
-        run: sleep 45
+        run: sleep 90 # 建議拉長到 90 秒，確保 GitHub Pages 圖片已上線
 
       - name: Post Main and Reply
         env:
@@ -40,31 +40,49 @@ jobs:
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
           # 1. 發布主貼文 (圖 + 400字)
-          echo "📤 正在發布主文..."
+          echo "📤 正在建立主文容器..."
+          # 💡 優化：使用 text@caption.txt 讓 curl 直接安全地讀取檔案內容
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=IMAGE" \
             --data-urlencode "image_url=$IMG_URL" \
-            --data-urlencode "text=$(cat caption.txt)" \
+            --data-urlencode text@caption.txt \
             --data-urlencode "access_token=$TOKEN")
           
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
-          if [ "$MAIN_ID" == "null" ]; then echo "❌ 主文容器失敗：$RES_MAIN"; exit 1; fi
+          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then 
+            echo "❌ 主文容器建立失敗：$RES_MAIN"
+            exit 1
+          fi
           
           sleep 15
+          echo "📤 正在發布主文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          
+          # 💡 優化：檢查主文是否真的發布成功
+          if [ "$POST_ID" == "null" ] || [ -z "$POST_ID" ]; then 
+            echo "❌ 主文發布失敗：$PUBLISH_RES"
+            exit 1
+          fi
           echo "✅ 主文發布成功，ID: $POST_ID"
           
           # 2. 發布地址留言 (回覆該主文)
           sleep 10
-          echo "📤 正在發布地址留言..."
+          echo "📤 正在建立地址留言容器..."
+          # 💡 優化：使用 text@comment.txt 讓 curl 直接安全地讀取檔案內容
           RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
-            --data-urlencode "text=$(cat comment.txt)" \
+            --data-urlencode text@comment.txt \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
           
           COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
+          if [ "$COMMENT_ID" == "null" ] || [ -z "$COMMENT_ID" ]; then 
+            echo "❌ 留言容器建立失敗：$RES_COMMENT"
+            exit 1
+          fi
+          
           sleep 5
+          echo "📤 正在發布留言..."
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
           echo "🎉 全部發布完成！"
