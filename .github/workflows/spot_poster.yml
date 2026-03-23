@@ -1,0 +1,106 @@
+name: 📸 下午小編 (Gemini 2.5 景點版 - GitHub 智慧等待版)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 這裡的 8 代表 UTC 早上 8 點 = 台灣時間下午 4 點
+    - cron: '0 8 * * *'
+
+jobs:
+  build_and_post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install
+        run: pip install google-genai requests
+      - name: Run AI script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # 💡 這裡改為執行景點版的腳本
+        run: python daily_spot.py
+        
+      - name: Push Image to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # 💡 路徑改為景點資料夾
+          git add images/spot/*.jpg
+          git commit -m "Update Spot Image" || echo "No changes"
+          git push
+
+      - name: Wait for GitHub Pages to Deploy
+        run: |
+          IMG_NAME=$(cat img_name.txt)
+          # 💡 網址路徑改為景點資料夾
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/spot/$IMG_NAME"
+          echo "🔍 正在等待圖片上線：$IMG_URL"
+          
+          for i in {1..20}; do
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
+            if [ "$HTTP_STATUS" == "200" ]; then
+              echo "✅ 圖片已成功上線！"
+              break
+            fi
+            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+            sleep 15
+          done
+          sleep 5
+
+      - name: Post Main and Reply
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          IMG_NAME=$(cat img_name.txt)
+          # 💡 網址路徑改為景點資料夾
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/spot/$IMG_NAME"
+          
+          # 1. 發布主貼文 (圖 + 文)
+          echo "📤 正在建立主文容器..."
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            --data-urlencode "media_type=IMAGE" \
+            --data-urlencode "image_url=$IMG_URL" \
+            --data-urlencode text@caption.txt \
+            --data-urlencode "access_token=$TOKEN")
+          
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then 
+            echo "❌ 主文容器建立失敗：$RES_MAIN"
+            exit 1
+          fi
+          
+          sleep 15
+          echo "📤 正在發布主文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          
+          if [ "$POST_ID" == "null" ] || [ -z "$POST_ID" ]; then 
+            echo "❌ 主文發布失敗：$PUBLISH_RES"
+            exit 1
+          fi
+          echo "✅ 主文發布成功，ID: $POST_ID"
+          
+          # 2. 發布地址留言 (回覆該主文)
+          sleep 10
+          echo "📤 正在建立地址留言容器..."
+          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            --data-urlencode "media_type=TEXT" \
+            --data-urlencode text@comment.txt \
+            --data-urlencode "reply_to_id=$POST_ID" \
+            --data-urlencode "access_token=$TOKEN")
+          
+          COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
+          if [ "$COMMENT_ID" == "null" ] || [ -z "$COMMENT_ID" ]; then 
+            echo "❌ 留言容器建立失敗：$RES_COMMENT"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 正在發布留言..."
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+          echo "🎉 全部發佈完成！"
