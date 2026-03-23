@@ -1,8 +1,23 @@
-# --- A. Gemini 生成文案 ---
+import os
+import sys
+import time
+from google import genai
+from google.genai import types
+
+# 1. 讀取 Secrets
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
+def run():
+    try:
+        if not GEMINI_KEY:
+            raise Exception("缺少 GEMINI_API_KEY 環境變數")
+            
+        client = genai.Client(api_key=GEMINI_KEY)
+        
+        # --- A. Gemini 生成文案 ---
         print("🤖 Gemini 正在亞洲精選城市中尋找美食...")
         target_cities = "曼谷、清邁、釜山、首爾、新加坡、沖繩、宮古島、福岡"
         
-        # 💡 修改 1：在指令中嚴格限制字數
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的專業旅遊與美食創作者。任務：\n"
             f"1. 從以下城市中『隨機挑選一個』：{target_cities}。\n"
@@ -20,11 +35,21 @@
         image_prompt = parts[1].strip() if len(parts) > 1 else "Professional gourmet food photography"
         comment_text = parts[2].strip() if len(parts) > 2 else "📍 地址資訊確認中..."
 
-        # 💡 修改 2：加上 Python 終極防呆機制，超過 480 字直接強制卡掉，保護 API 不出錯
+        # 💡 防呆機制：超過 480 字直接強制卡掉，保護 API 不出錯
         if len(caption) > 480:
             print(f"⚠️ 警告：生成的字數太長 ({len(caption)} 字)，已觸發自動截斷機制！")
             caption = caption[:475] + "..."
 
+        # 💡 曼谷推廣連結 (記得換成你真實的網址！)
         if "曼谷" in caption or "曼谷" in comment_text:
             promo_text = "\n\n🇹🇭 正在規劃泰國行嗎？歡迎使用我的【曼谷通】APP，幫你輕鬆找好吃好玩的！ 👉 https://你的曼谷通網址.com"
             comment_text += promo_text
+
+        # --- B. Gemini 生成圖片並儲存 ---
+        print(f"🎨 正在繪製：{image_prompt}")
+        img_res = client.models.generate_content(
+            model='gemini-2.5-flash-image',
+            contents=image_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio="1:1")
