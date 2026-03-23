@@ -21,29 +21,73 @@ CITIES = [
 
 def run():
     try:
-        # 使用官方最新套件
         client = genai.Client(api_key=GEMINI_KEY)
         target = random.choice(CITIES)
         print(f"🎲 準備為【{target['name']}】生成文案...")
 
-        # 🚀 關鍵：呼叫 Google 目前唯一開放的 2.5 Flash
+        # 嚴格限制字數的提示詞
+        prompt = f"""
+        你是一位充滿熱情且專業的旅遊部落客。請為『{target['name']}』寫一篇 Threads 貼文。
+        主題是：{target['topic']}。
+        要求：
+        1. 總字數嚴格限制在 200 到 300 字之間。
+        2. 善用生動的描述、適當的空行排版與 Emoji。
+        3. 結尾必須有一個互動問句引導留言。
+        4. 加上標籤 #旅遊 #自由行 #{target['name']}。
+        5. 絕對不要在正文中包含任何網址連結！只要說「完整攻略請看一樓留言」即可。
+        """
+        
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
+            contents=prompt
         )
         
-        # 3. 發布到 Threads
-        res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'TEXT', 'text': response.text, 'access_token': THREADS_TOKEN
+        main_text = response.text.strip()
+        
+        # 🛡️ 字數保險絲：如果超過 480 字，強制截斷並加上刪節號，絕對不讓 Threads 報錯
+        if len(main_text) > 480:
+            print("⚠️ 警告：AI 生成字數過多，觸發強制截斷防護！")
+            main_text = main_text[:470] + "...\n\n(完整攻略請看一樓留言👇)"
+
+        # 📤 1. 建立主貼文
+        print("📤 1. 正在發布主貼文...")
+        res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
+            'media_type': 'TEXT', 
+            'text': main_text, 
+            'access_token': THREADS_TOKEN
         }).json()
         
-        if 'id' in res:
-            requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
-                'creation_id': res['id'], 'access_token': THREADS_TOKEN
-            })
-            print(f"✅ 【{target['name']}】發布成功！")
+        if 'id' in res_main:
+            # 發布主貼文
+            publish_main = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
+                'creation_id': res_main['id'], 
+                'access_token': THREADS_TOKEN
+            }).json()
+            main_post_id = publish_main.get('id')
+            print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
+            
+            # 📤 2. 在主貼文底下建立留言（放連結）
+            print("📤 2. 正在留言區發布專屬連結...")
+            reply_text = f"👇 專屬你的【{target['name']}】完整攻略與私房行程表，我整理在這邊了：\n{target['url']}"
+            
+            res_reply = requests.post("https://graph.threads.net/v1.0/me/threads", params={
+                'media_type': 'TEXT', 
+                'text': reply_text, 
+                'reply_to_id': main_post_id, # 指定回覆給剛剛發佈的主貼文
+                'access_token': THREADS_TOKEN
+            }).json()
+            
+            if 'id' in res_reply:
+                # 發布留言
+                requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
+                    'creation_id': res_reply['id'], 
+                    'access_token': THREADS_TOKEN
+                })
+                print(f"🎉 留言連結發布成功！排版完美！")
+            else:
+                print(f"❌ 建立留言回覆失敗：{res_reply}")
         else:
-            print(f"❌ Threads API 拒絕發文：{res}")
+            print(f"❌ 建立主貼文失敗：{res_main}")
             sys.exit(1)
 
     except Exception as e:
