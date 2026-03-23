@@ -27,7 +27,7 @@ def run():
 
         # 🚀 使用全新鑰匙呼叫最新的 2.0 Flash
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         )
         
