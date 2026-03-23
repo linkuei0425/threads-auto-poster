@@ -1,0 +1,61 @@
+name: 🍴 中午小編 (圖文版)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *'
+
+jobs:
+  build_and_post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 必須開啟讀寫權限
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install Dependencies
+        run: pip install google-genai requests Pillow
+        
+      - name: Run Script (Generate Text and Image)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python daily_food.py
+      
+      - name: Commit & Push Image to GitHub Pages
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add images/food/*.jpg
+          git commit -m "Add AI Generated Food Image" || echo "No changes"
+          git push
+      
+      - name: Wait for GitHub Pages Deployment # 等待 30 秒讓網址生效
+        run: sleep 30
+
+      - name: Final Post to Threads
+        run: |
+          IMG_NAME=$(sed -n '1p' post_data.txt)
+          CAPTION=$(sed -n '2p' post_data.txt)
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
+          
+          echo "📤 發布網址：$IMG_URL"
+          
+          # 建立媒體容器
+          RESPONSE=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads?media_type=IMAGE&image_url=$IMG_URL&text=$(echo $CAPTION | jq -sRr @uri)&access_token=${{ secrets.THREADS_ACCESS_TOKEN }}")
+          CREATION_ID=$(echo $RESPONSE | jq -r '.id')
+          
+          if [ "$CREATION_ID" != "null" ]; then
+            sleep 10
+            # 正式發布
+            curl -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$CREATION_ID&access_token=${{ secrets.THREADS_ACCESS_TOKEN }}"
+            echo "🎉 圖文發布成功！"
+          else
+            echo "❌ 失敗原因：$RESPONSE"
+            exit 1
+          fi
