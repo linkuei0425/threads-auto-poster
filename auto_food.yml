@@ -1,83 +1,23 @@
-import os
-import random
-import requests
-import sys
-import time
-import re  # 🛠️ 新增正規表達式模組，用來拆分地址
-from google import genai
+name: 🍴 中午小編 (深度美食景點文)
+on:
+  schedule:
+    # 台灣時間中午 12:00 (UTC 04:00)
+    - cron: '0 4 * * *'
+  workflow_dispatch: # 讓你可以隨時手動點擊執行
 
-# 1. 讀取 Secrets
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
-
-CITIES = [
-    {"name": "曼谷", "topic": "道地街頭美食（如烤豬肉串、青木瓜沙拉）", "url": "https://linkuei0425.github.io/Bangkok/"},
-    {"name": "清邁", "topic": "隱身巷弄的蘭納風格文青咖啡廳", "url": "https://linkuei0425.github.io/ChiangMai/"},
-    {"name": "首爾", "topic": "深夜韓式布帳馬車美食（如辣炒年糕、魚板湯）", "url": "https://linkuei0425.github.io/Seoul/"},
-    {"name": "釜山", "topic": "札嘎其市場的海鮮或是甘川洞文化村", "url": "https://linkuei0425.github.io/Busan/"},
-    {"name": "沖繩", "topic": "萬座毛海景或是道地的石垣牛料理", "url": "https://linkuei0425.github.io/Okinawa/"},
-    {"name": "新加坡", "topic": "熟食中心（Hawker Center）的特色小吃", "url": "https://linkuei0425.github.io/Singapore/"},
-    {"name": "福岡", "topic": "中洲屋台的濃厚豚骨拉麵", "url": "https://linkuei0425.github.io/FUKUOKA/"},
-    {"name": "京阪神", "topic": "京都清水寺周邊店鋪或是大阪道頓堀美食", "url": "https://linkuei0425.github.io/Osaka/"}
-]
-
-def run():
-    try:
-        client = genai.Client(api_key=GEMINI_KEY)
-        target = random.choice(CITIES)
-        print(f"🎲 準備生成【{target['name']}】深度文案...")
-
-        # 🚀 升級提示詞：要求 AI 在文末附上地址，並用特殊符號隔開
-        prompt = f"""
-        你是一位深度旅遊作家。請為『{target['name']}』寫一篇 Threads 貼文，介紹【{target['topic']}】。
-        要求：
-        1. 總字數限制在 400 到 450 字之間。
-        2. 請用第一人稱敘事，描寫感官體驗與在地氛圍。
-        3. 段落排版清晰，適度使用 Emoji。
-        4. 加上標籤 #旅遊 #自由行 #{target['name']}。
-        5. ⚠️ 絕對不要在正文中包含任何網址！
-        6. 重要：在文章結束後，請另起一行，輸入符號 [ADDRESS]，接著寫出你文中介紹的那個具體地點/店家的正確「地址」。
-        """
-        
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-        full_output = response.text.strip()
-        
-        # ✂️ 拆分文章與地址
-        if "[ADDRESS]" in full_output:
-            parts = full_output.split("[ADDRESS]")
-            main_text = parts[0].strip()
-            spot_address = parts[1].strip()
-        else:
-            main_text = full_output
-            spot_address = "查看完整攻略獲取詳細位置"
-
-        # 🛡️ 字數安全截斷
-        if len(main_text) > 490:
-            main_text = main_text[:480] + "..."
-
-        # --- 發布流程 ---
-        print("📤 1. 發布深度主文...")
-        res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={'media_type': 'TEXT', 'text': main_text, 'access_token': THREADS_TOKEN}).json()
-        
-        if 'id' in res_main:
-            publish_main = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={'creation_id': res_main['id'], 'access_token': THREADS_TOKEN}).json()
-            main_id = publish_main.get('id')
-            
-            print("⏳ 等待 20 秒讓 Meta 伺服器建檔...")
-            time.sleep(20)
-            
-            # 🚀 留言區內容：加入地址資訊
-            print(f"📤 2. 正在發布含地址的留言連結...")
-            reply_text = f"📍 店家/景點地址：\n{spot_address}\n\n---\n👇 想看更多【{target['name']}】的隱藏版行程與完整攻略，都在這裡了：\n{target['url']}"
-            
-            res_reply = requests.post("https://graph.threads.net/v1.0/me/threads", params={'media_type': 'TEXT', 'text': reply_text, 'reply_to_id': main_id, 'access_token': THREADS_TOKEN}).json()
-            
-            if 'id' in res_reply:
-                time.sleep(5)
-                requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={'creation_id': res_reply['id'], 'access_token': THREADS_TOKEN})
-                print(f"🎉 發布成功！地址與連結已更新至留言區。")
-    except Exception as e:
-        print(f"💥 發生錯誤：{e}")
-
-if __name__ == "__main__":
-    run()
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run food script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: python daily_food.py
