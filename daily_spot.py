@@ -39,12 +39,12 @@ def run():
         image_prompt = parts[1].strip() if len(parts) > 1 else "Professional landscape photography, 8k, highly detailed"
         comment_text = parts[2].strip() if len(parts) > 2 else "📍 景點資訊確認中..."
 
-        # 💡 主文防呆機制：超過 480 字直接強制截斷
+        # 💡 主文防呆機制
         if len(caption) > 480:
             print(f"⚠️ 警告：主文字數太長 ({len(caption)} 字)，已觸發自動截斷！")
             caption = caption[:475] + "..."
 
-        # 💡 留言防呆機制：確保交通攻略不會超過 Threads 的 500 字上限
+        # 💡 留言防呆機制
         if len(comment_text) > 480:
             print(f"⚠️ 警告：留言字數太長 ({len(comment_text)} 字)，已觸發自動截斷！")
             comment_text = comment_text[:475] + "..."
@@ -61,8 +61,14 @@ def run():
         )
         
         img_name = f"spot_{int(time.time())}.jpg"
-        img_dir = "images/spot" # 存入景點專屬資料夾
-        os.makedirs(img_dir, exist_ok=True)
+        img_dir = "images/spot"
+        
+        # 💡 終極資料夾防護機制：如果是不小心建錯的「檔案」，就強制刪除
+        if os.path.exists(img_dir) and not os.path.isdir(img_dir):
+            print(f"⚠️ 發現同名檔案，正在清空以建立正確的資料夾...")
+            os.remove(img_dir)
+        os.makedirs(img_dir, exist_ok=True) # 安心建立資料夾
+        
         local_img_path = f"{img_dir}/{img_name}"
         
         for part in img_res.parts:
@@ -70,7 +76,7 @@ def run():
                 part.as_image().save(local_img_path)
                 break
                 
-        # --- C. 寫入暫存檔 (供 GitHub Actions 讀取) ---
+        # --- C. 寫入暫存檔 ---
         with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_name)
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment_text)
