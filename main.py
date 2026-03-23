@@ -8,7 +8,6 @@ from google import genai
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
-# 2. 八大旅遊通資料
 CITIES = [
     {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
@@ -26,9 +25,9 @@ def run():
         target = random.choice(CITIES)
         print(f"🎲 準備為【{target['name']}】生成文案...")
 
-        # 🚀 關鍵：你已經綁卡了，現在 2.0 絕對暢通無阻！
+        # 🚀 關鍵：順應 Google 針對新用戶的限制，改用最穩定的 1.5 Flash
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
         )
         
