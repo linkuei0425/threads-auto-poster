@@ -1,65 +1,64 @@
-name: 🍴 中午小編 (Gemini 2.5 深度版)
+name: 🍴 中午小編 (自動留言版)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * *' # 台灣時間中午 12:00
+    - cron: '0 4 * * *'
 
 jobs:
   build_and_post:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 關鍵：允許機器人自動上傳圖片
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          
-      - name: Install Dependencies
+      - name: Install
         run: pip install google-genai requests
-        
-      - name: Generate Content (2.5 Flash)
+      - name: Generate
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: python daily_food.py
-      
-      - name: Push Image to Repo
+      - name: Push Image
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add images/food/*.jpg
-          git commit -m "Update Food Image $(date)" || echo "No changes"
+          git commit -m "Update Food" || echo "No changes"
           git push
-      
-      - name: Wait for CDN Refresh # 等待網址生效
+      - name: Wait for CDN
         run: sleep 40
 
-      - name: Final Post to Threads
+      - name: Post Main and Comment
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
-          IMG_NAME=$(sed -n '1p' post_data.txt)
-          CAPTION=$(sed -n '2p' post_data.txt)
+          IMG_NAME=$(cat img_name.txt)
+          CAPTION=$(cat caption.txt)
+          COMMENT=$(cat comment.txt)
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
-          echo "📤 準備發布圖片：$IMG_URL"
+          # 1. 發布主文容器
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "text=$CAPTION" -d "access_token=$TOKEN")
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          sleep 10
           
-          # 呼叫 Threads API 發布圖文
-          RESPONSE=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
-            -d "media_type=IMAGE" \
-            -d "image_url=$IMG_URL" \
-            -d "text=$CAPTION" \
-            -d "access_token=${{ secrets.THREADS_ACCESS_TOKEN }}")
+          # 2. 正式發布主文並取得發布後的 POST_ID
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "主文發布成功，ID: $POST_ID"
+          sleep 10
           
-          CREATION_ID=$(echo $RESPONSE | jq -r '.id')
+          # 3. 發布「留言」容器 (使用 reply_to_id 參數)
+          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            -d "media_type=TEXT" -d "text=$COMMENT" -d "reply_to_id=$POST_ID" -d "access_token=$TOKEN")
+          COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
+          sleep 5
           
-          if [ "$CREATION_ID" != "null" ]; then
-            sleep 15
-            curl -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$CREATION_ID&access_token=${{ secrets.THREADS_ACCESS_TOKEN }}"
-            echo "🎉 深度圖文發布成功！"
-          else
-            echo "❌ 失敗原因：$RESPONSE"
-            exit 1
-          fi
+          # 4. 正式發布留言
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+          echo "🎉 地址留言已成功送出！"
