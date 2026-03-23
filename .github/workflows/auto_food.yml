@@ -1,4 +1,4 @@
-name: 🍴 中午小編 (Gemini 2.5 終極版)
+name: 🍴 中午小編 (Gemini 2.5 終極自動版)
 
 on:
   workflow_dispatch:
@@ -18,29 +18,28 @@ jobs:
           python-version: '3.10'
       - name: Install
         run: pip install google-genai requests
-      - name: Run AI Script
+      - name: Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python daily_food.py
-      - name: Push Image
+      - name: Push to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add images/food/*.jpg
-          git commit -m "Add New Food Image" || echo "No changes"
+          git commit -m "Add Food Image" || echo "No changes"
           git push
-      - name: Wait for GitHub Pages
-        run: sleep 45 # 增加等待時間，確保長文配圖網址生效
+      - name: Wait for CDN
+        run: sleep 45
 
-      - name: Final Post and Reply
+      - name: Post and Reply
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
           IMG_NAME=$(cat img_name.txt)
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
-          # 使用 --data-urlencode 處理 400 字長文與特殊符號
-          echo "📤 正在發布主文..."
+          # 發布主貼文 (圖 + 400字)
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=IMAGE" \
             --data-urlencode "image_url=$IMG_URL" \
@@ -48,15 +47,14 @@ jobs:
             --data-urlencode "access_token=$TOKEN")
           
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
-          if [ "$MAIN_ID" == "null" ]; then echo "❌ 主文失敗：$RES_MAIN"; exit 1; fi
-          
           sleep 15
+          
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
-          echo "✅ 主文發布成功，ID: $POST_ID"
+          echo "主文發布 ID: $POST_ID"
           
+          # 發布留言 (地址與店名)
           sleep 10
-          echo "📤 正在發布地址留言..."
           RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
             --data-urlencode "text=$(cat comment.txt)" \
@@ -66,4 +64,4 @@ jobs:
           COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
           sleep 5
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
-          echo "🎉 全部完成！"
+          echo "🎉 任務圓滿達成！"
