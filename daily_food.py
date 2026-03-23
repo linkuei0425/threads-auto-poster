@@ -4,6 +4,7 @@ import requests
 import sys
 import time
 from google import genai
+from google.genai import types # 修正 1：引入 types 模組來設定圖片生成的 config
 
 # 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
@@ -30,43 +31,47 @@ def run():
             contents=task_prompt
         )
         
-        # 拆分內容
+        # 拆分內容 (加入長度檢查避免索引錯誤)
         parts = res.text.split('---')
-        caption = parts[0].strip()
-        image_prompt = parts[1].strip() if len(parts) > 1 else "Professional gourmet food photography, 8k"
+        caption = parts[0].strip() if len(parts) > 0 else "無法生成貼文內容"
+        image_prompt = parts[1].strip() if len(parts) > 1 else "Professional gourmet food photography, 8k, highly detailed"
         comment_text = parts[2].strip() if len(parts) > 2 else "📍 地址資訊確認中..."
 
-        # --- B. Imagen 3.0 生成圖片 (嘗試穩定型號名稱) ---
+        # --- B. Gemini Flash Image 生成圖片 (修正 2：改用統一的生成入口) ---
         print(f"🎨 正在繪製：{image_prompt}")
         
-        # 修正：在 2026 SDK 中，這通常是付費帳戶最穩定的模型名稱
-        img_res = client.models.generate_images(
-            model='imagen-3.0-generate-001', 
-            prompt=image_prompt,
-            config={
-                "number_of_images": 1,
-                "aspect_ratio": "1:1",
-                "output_mime_type": "image/jpeg"
-            }
+        img_res = client.models.generate_content(
+            model='gemini-2.5-flash-image', # 替換成最新的圖像模型名稱
+            contents=image_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(
+                    aspect_ratio="1:1" # 適合 Threads 和 IG 的比例
+                )
+            )
         )
         
         img_name = f"food_{int(time.time())}.jpg"
         img_dir = "images/food"
         os.makedirs(img_dir, exist_ok=True)
         
-        with open(f"{img_dir}/{img_name}", "wb") as f:
-            f.write(img_res.generated_images[0].image_bytes)
+        # 修正 3：使用新版 SDK 的 as_image() 方法來儲存圖片
+        for part in img_res.parts:
+            if part.inline_data:
+                generated_image = part.as_image()
+                generated_image.save(f"{img_dir}/{img_name}")
+                break # 確保只取第一張
 
         # --- C. 寫入多個暫存檔 (解決 Shell 讀取換行問題) ---
         with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_name)
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment_text)
             
-        print(f"✅ Gemini 2.5 任務完成！主文字數：{len(caption)}")
+        print(f"✅ 任務完成！主文字數：{len(caption)}")
+        print(f"📁 圖片已順利儲存至：{img_dir}/{img_name}")
 
     except Exception as e:
         print(f"💥 發生錯誤：{e}")
-        # 如果 imagen-3.0-generate-001 還是報 404，這裡會噴出詳細錯誤
         sys.exit(1)
 
 if __name__ == "__main__":
