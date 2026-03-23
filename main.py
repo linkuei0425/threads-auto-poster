@@ -2,7 +2,7 @@ import os
 import random
 import requests
 import sys
-import time  # ⏳ 新增時間模組
+import time
 from google import genai
 
 # 1. 讀取 Secrets
@@ -69,12 +69,12 @@ def run():
                 
             print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
             
-            # ⏳ 關鍵修正：煞車等 5 秒，讓 Threads 伺服器建檔
-            print("⏳ 等待 5 秒鐘，讓系統準備留言區...")
-            time.sleep(5)
+            # ⏳ 加長煞車時間：給 Meta 全球伺服器 15 秒鐘同步資料
+            print("⏳ 等待 15 秒鐘，讓 Meta 伺服器建檔你的主貼文...")
+            time.sleep(15)
             
-            # 📤 2. 在主貼文底下建立留言
-            print("📤 2. 正在留言區發布專屬連結...")
+            # 📤 2. 建立留言容器
+            print("📤 2. 正在建立留言區連結...")
             reply_text = f"👇 專屬你的【{target['name']}】完整攻略與私房行程表，我整理在這邊了：\n{target['url']}"
             
             res_reply = requests.post("https://graph.threads.net/v1.0/me/threads", params={
@@ -85,6 +85,9 @@ def run():
             }).json()
             
             if 'id' in res_reply:
+                print("⏳ 留言容器已建立，等待 5 秒鐘進行最終發布...")
+                time.sleep(5) # 再給一個小煞車，確保留言內容也被伺服器準備好
+                
                 # 發布留言
                 publish_reply = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                     'creation_id': res_reply['id'], 
@@ -92,7 +95,7 @@ def run():
                 }).json()
                 
                 if 'id' in publish_reply:
-                    print(f"🎉 留言連結發布成功！排版完美！")
+                    print(f"🎉 留言連結發布成功！【主文+留言】排版完美結束！")
                 else:
                     print(f"❌ 留言【發布】失敗：{publish_reply}")
             else:
