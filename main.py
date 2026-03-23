@@ -2,6 +2,7 @@ import os
 import random
 import requests
 import sys
+from google import genai
 
 # 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
@@ -19,54 +20,34 @@ CITIES = [
 ]
 
 def run():
-    if not GEMINI_KEY or not THREADS_TOKEN:
-        print("❌ 錯誤：找不到 API Key 或 Token。")
-        sys.exit(1)
-
-    target = random.choice(CITIES)
-    print(f"🎲 準備為【{target['name']}】生成文案...")
-
-    prompt = f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
-
-    # 🚀 關鍵：直接呼叫 Google v1 正式版 API，徹底繞過 SDK 的 404 Bug
-    print("🌐 正在直連 Gemini 1.5 Flash 正式版主機...")
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
-    
     try:
-        gemini_res = requests.post(url, json=payload).json()
-        
-        # 檢查 Google 有沒有擋我們
-        if "error" in gemini_res:
-            print(f"❌ Gemini API 拒絕請求：{gemini_res['error']['message']}")
-            sys.exit(1)
-            
-        content = gemini_res['candidates'][0]['content']['parts'][0]['text']
-        print(f"✅ 文案生成成功！內容：\n{content}\n")
-        
-    except Exception as e:
-        print(f"💥 Gemini 連線失敗：{e}")
-        sys.exit(1)
+        # 使用官方最新套件
+        client = genai.Client(api_key=GEMINI_KEY)
+        target = random.choice(CITIES)
+        print(f"🎲 準備為【{target['name']}】生成文案...")
 
-    # --- 發布到 Threads ---
-    print("📤 準備發布至 Threads...")
-    try:
+        # 🚀 關鍵：呼叫 Google 目前唯一開放的 2.5 Flash
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=f"你是一位活潑的旅遊部落客。請為『{target['name']}』寫一段 80 字內的 Threads 貼文。主題是：{target['topic']}。必須包含網址 {target['url']}，多加 Emoji，結尾加 #旅遊 #自由行。"
+        )
+        
+        # 3. 發布到 Threads
         res = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'TEXT', 'text': content, 'access_token': THREADS_TOKEN
+            'media_type': 'TEXT', 'text': response.text, 'access_token': THREADS_TOKEN
         }).json()
         
         if 'id' in res:
-            publish = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
+            requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                 'creation_id': res['id'], 'access_token': THREADS_TOKEN
-            }).json()
-            print(f"🎉 【{target['name']}】發布成功！貼文 ID: {publish.get('id')}")
+            })
+            print(f"✅ 【{target['name']}】發布成功！")
         else:
             print(f"❌ Threads API 拒絕發文：{res}")
             sys.exit(1)
+
     except Exception as e:
-        print(f"💥 Threads 連線失敗：{e}")
+        print(f"💥 發生錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
