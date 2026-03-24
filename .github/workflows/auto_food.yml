@@ -82,9 +82,9 @@ jobs:
           fi
           echo "✅ 主文發布成功，ID: $POST_ID"
           
-          # 2. 發布地址留言 (回覆該主文)
+          # 2. 發布第一則留言 (閒聊推薦)
           sleep 10
-          echo "📤 正在建立地址留言容器..."
+          echo "📤 正在建立第一則留言容器..."
           RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
             --data-urlencode text@comment.txt \
@@ -93,11 +93,33 @@ jobs:
           
           COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
           if [ "$COMMENT_ID" == "null" ] || [ -z "$COMMENT_ID" ]; then 
-            echo "❌ 留言容器建立失敗：$RES_COMMENT"
+            echo "❌ 留言1容器建立失敗：$RES_COMMENT"
             exit 1
           fi
           
           sleep 5
-          echo "📤 正在發布留言..."
+          echo "📤 正在發布第一則留言..."
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
-          echo "🎉 全部發布完成！"
+          echo "✅ 第一則留言發布成功"
+
+          # 3. 發布第二則留言 (詳細地址與店名)
+          sleep 10
+          echo "📤 正在建立第二則留言容器..."
+          RES_COMMENT2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            --data-urlencode "media_type=TEXT" \
+            --data-urlencode text@comment2.txt \
+            --data-urlencode "reply_to_id=$POST_ID" \
+            --data-urlencode "access_token=$TOKEN")
+          
+          COMMENT2_ID=$(echo $RES_COMMENT2 | jq -r '.id')
+          if [ "$COMMENT2_ID" == "null" ] || [ -z "$COMMENT2_ID" ]; then 
+            echo "❌ 留言2容器建立失敗：$RES_COMMENT2"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 正在發布第二則留言..."
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT2_ID&access_token=$TOKEN"
+          echo "✅ 第二則留言發布成功"
+
+          echo "🎉 全部發布完成！主文+雙留言蓋樓成功！"
