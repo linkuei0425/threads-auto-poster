@@ -9,6 +9,7 @@ from google import genai
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 
+# 回復為無圖片的城市列表結構
 CITIES = [
     {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
     {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
@@ -24,18 +25,24 @@ def run():
     try:
         client = genai.Client(api_key=GEMINI_KEY)
         target = random.choice(CITIES)
-        print(f"🎲 準備為【{target['name']}】生成痛點行銷貼文...")
 
-        # 💡 強調痛點先行的專業行銷 Prompt
+        print(f"🎲 準備為【{target['name']}】生成「留言解鎖式」純文字行銷貼文...")
+
+        # 💡 全面修改 Prompt，強調「留言解鎖」
         prompt = f"""
-        你是一位資深的「專業旅遊專家與行銷達人」。請為專屬旅遊APP『{target['name']}』撰寫一篇 Threads 貼文，涵蓋的城市亮點為：{target['topic']}。
+        你是一位資深的「專業旅遊專家與社群行銷達人」。
+        你的任務是為專屬旅遊APP『{target['name']}』撰寫一篇 Threads 貼文。
 
-        📝 撰寫要求：
-        1. 【開頭直擊痛點與解方（極度重要）】：貼文一開始，請立刻點出自由行旅客的痛點（例如：排行程排到崩潰、找路迷路、怕踩雷吃到超雷餐廳等），並「緊接著」宣告這款『{target['name']}』APP 是完全免費的救星，能完美解決這些問題。
-        2. 【城市亮點行銷】：在解決痛點後，用極具吸引力、讓人想立刻買機票的專業文案，包裝並介紹 {target['name']} 的魅力（{target['topic']}），讓讀者覺得有了這個 APP，就能完美享受這些行程。
-        3. 【排版規定】：段落與段落之間『必須空一行』！請多利用短句，善用列點與 Emoji，保持版面清爽好讀，展現專業感。
-        4. 【字數限制】：總字數控制在 350 到 400 字左右（絕對不能超過 450 字，以符合 Threads 限制）。
-        5. 【無網址規定】：絕對不要在正文中包含任何網址連結！結尾只要強力呼籲「🔗 完全免費的 APP 與終極攻略連結，我放在一樓留言👇 趕快存起來！」即可。
+        📖 **本次貼文要包裝的城市亮點：** {target['topic']}
+
+        📝 **撰寫要求：**
+        1. 【開頭直擊痛點與解方】：貼文一開始，立刻點出自由行旅客的痛點（例如：排行程排到崩潰、怕踩雷、迷路等），並宣告這款『{target['name']}』APP 是完全免費的終極攻略。
+        2. 【城市亮點行銷】：在解決痛點後，用極具吸引力、專業的文案，包裝並介紹 {target['topic']} 的魅力。
+        3. 【排版規定（嚴格遵守）】：段落與段落之間『必須空一行』！多利用短句，善用列點與 Emoji，絕對不要把文字擠成一團。
+        4. 【字數限制】：總字數控制在 350 到 400 字左右（絕對不能超過 450 字）。
+        5. 【⚠️ 新型 Call To Action（極度重要）⚠️】：絕對不要提到「連結在一樓留言」！
+           請在貼文結尾引導讀者進行「留言解鎖」。引導方式必須是：
+           「🔗 立刻留言：『{target['name']}』，我就會免費傳送完整 APP 連結與終極攻略給你喔！👇 存起來！」
         6. 加上標籤 #旅遊 #自由行 #{target['name']}。
         """
         
@@ -49,10 +56,10 @@ def run():
         # 💡 防呆機制：確保字數不會爆炸
         if len(main_text) > 480:
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
-            main_text = main_text[:465] + "...\n\n(完整免費 APP 連結請看一樓留言👇)"
+            main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
-        # 📤 1. 建立主貼文
-        print("📤 1. 正在發布主貼文...")
+        # 📤 1. 建立純文字主貼文
+        print("📤 1. 正在建立主貼文容器 (純文字)...")
         res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
             'media_type': 'TEXT', 
             'text': main_text, 
@@ -73,14 +80,13 @@ def run():
                 
             print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
             
-            # ⏳ 加長煞車時間
-            print("⏳ 等待 15 秒鐘，讓 Meta 伺服器建檔你的主貼文...")
+            # ⏳ 加長煞車時間：純文字 15 秒同步資料即可
+            print("⏳ 等待 15 秒鐘，讓 Meta 伺服器建檔你的貼文...")
             time.sleep(15)
             
-            # 📤 2. 建立留言容器 (網址放在這裡)
-            print("📤 2. 正在建立留言區連結...")
-            # 💡 留言處也保持專業高價值的行銷語氣
-            reply_text = f"👇 剛剛提到的【{target['name']}】完全免費 APP 與終極攻略，連結幫大家準備好了，點擊馬上開始規劃你的完美旅程：\n{target['url']}"
+            # 📤 2. 建立留言容器 (💡 不放網址，改成確認留言語氣)
+            print("📤 2. 正在建立留言區...")
+            reply_text = f"👍 沒錯，依照上面指示留言，我們就會把【{target['name']}】的免費 APP 連結傳給你囉！"
             
             res_reply = requests.post("https://graph.threads.net/v1.0/me/threads", params={
                 'media_type': 'TEXT', 
@@ -100,7 +106,7 @@ def run():
                 }).json()
                 
                 if 'id' in publish_reply:
-                    print(f"🎉 留言連結發布成功！【痛點行銷文+網址留言】排版完美結束！")
+                    print(f"🎉 留言發布成功！【純文字+留言解鎖文案】排版完美結束！")
                 else:
                     print(f"❌ 留言【發布】失敗：{publish_reply}")
             else:
