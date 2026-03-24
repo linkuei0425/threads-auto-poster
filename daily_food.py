@@ -14,29 +14,26 @@ def run():
             
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # --- A. Gemini 生成美食文案與實用資訊 ---
-        print("🤖 Gemini 正在亞洲精選城市中尋找必吃美食...")
+        # --- A. Gemini 生成 Threads 專屬閒聊風文案 ---
+        print("🤖 Gemini 正在亞洲精選城市中尋找必吃美食並轉換為 Threads 閒聊體...")
         
-        # 💡 16 大熱門旅遊城市
         target_cities = "曼谷、清邁、釜山、首爾、新加坡、沖繩、宮古島、福岡、大阪、京都、神戶、東京、宇治、奈良、香港、澳門"
         
+        # 💡 核心修改區：完全改變 AI 的寫作邏輯，迎合 Threads 演算法
         task_prompt = (
-            f"你是一位經營『Kokko愛旅行』的專業旅遊與美食創作者。任務：\n"
-            f"1. 從以下城市中『隨機挑選一個』：{target_cities}。\n"
-            f"2. 挑選該城市中一家『真實存在』的在地必吃美食、特色咖啡廳或隱藏版餐廳。\n"
-            f"3. 撰寫一段 Threads 貼文主文（中文）。以第一人稱（Kokko）分享，描述食物口感細節與現場氛圍，語氣生動熱情，多用符合情境的 Emoji。\n"
-            f"⚠️ 排版規定：段落與段落之間『必須空一行』！請多利用短句，絕對不要把文字全部擠成一團！\n"
-            f"⚠️ 字數規定：主文字數（含標點符號與Emoji）『絕對不可以超過 350 字』！\n"
-            f"4. 撰寫一段該美食或餐廳的英文繪圖咒語 (Image Prompt)，風格必須是專業高畫質美食攝影 (professional gourmet food photography)、令人垂涎欲滴。\n"
-            f"5. 撰寫一條給『自由行吃貨』的專屬留言內容。格式為：\n"
-            f"『📍 店名：XXX \n"
-            f"📍 所在城市：XXX \n"
-            f"📍 詳細地址：XXX \n\n"
-            f"🤤  Kokko 推薦指南：\n"
-            f"[請條列式說明，例如：\n"
-            f"✨ 必點推薦：ＯＯＯ（簡述口感）\n"
-            f"💡 貼心提醒：建議提早排隊/交通方式/營業時間等]\n"
-            f"⚠️ 留言排版規定：推薦指南請務必『條列式分行』撰寫，保持清晰易讀！』\n"
+            f"你是一位經營『Kokko愛旅行』的創作者。你現在要發一篇 Threads 貼文，必須完全符合 Threads 『隨性、閒聊、強烈個人情緒、不套公式』的風格，絕對不要寫成 IG 的精緻行銷文或旅遊書攻略。\n"
+            f"任務：\n"
+            f"1. 從以下城市中隨機挑選一個：{target_cities}。\n"
+            f"2. 挑選該城市中一家『真實存在』且極具特色的必吃美食或隱藏版餐廳。\n"
+            f"3. 撰寫一段 Threads 貼文主文（中文）。\n"
+            f"   - ⚠️ 絕對禁止：不要用條列式、不要用數字編號、不要寫出詳細地址或營業時間、減少使用 Emoji（最多 2 個）。\n"
+            f"   - 💡 寫作風格：用第一人稱（Kokko）發牢騷或表達極度興奮。例如：『為了吃這家排隊排到懷疑人生，但吃到的那一刻真的覺得值了...』或是『到底誰發明這種神仙食物...』。\n"
+            f"   - 💡 互動機制：結尾必須拋出一個能引發討論的問題（例如：大家去[城市]必吃的是哪家？有人也吃過這家嗎？）。\n"
+            f"   - 字數規定：主文字數越短越好，『絕對不可以超過 150 字』！\n"
+            f"4. 撰寫一段該美食或餐廳的英文繪圖咒語 (Image Prompt)，風格為專業高畫質美食攝影 (professional gourmet food photography)、令人垂涎欲滴。\n"
+            f"5. 撰寫一條『補充在自己貼文底下』的留言內容。\n"
+            f"   - 這裡才公佈店家資訊，但語氣要像是在回覆朋友，不要像機器人表單。\n"
+            f"   - 格式參考：『這家叫 XXX，在 OOO 附近。那個（必點菜色）真的必點，口感超讚！想去的話建議（某個時間點）去才不會排到瘋掉～』\n"
             f"請嚴格使用 '---' 分隔這三部分（主文---咒語---留言內容）。"
         )
         
@@ -46,12 +43,11 @@ def run():
         image_prompt = parts[1].strip() if len(parts) > 1 else "Professional gourmet food photography, highly detailed, 8k"
         comment_text = parts[2].strip() if len(parts) > 2 else "📍 餐廳資訊確認中..."
 
-        # 💡 主文防呆機制：超過 480 字直接強制截斷
+        # 💡 防呆機制維持
         if len(caption) > 480:
             print(f"⚠️ 警告：主文字數太長 ({len(caption)} 字)，已觸發自動截斷！")
             caption = caption[:475] + "..."
 
-        # 💡 留言防呆機制：確保不會超過 Threads 的 500 字上限
         if len(comment_text) > 480:
             print(f"⚠️ 警告：留言字數太長 ({len(comment_text)} 字)，已觸發自動截斷！")
             comment_text = comment_text[:475] + "..."
@@ -68,9 +64,8 @@ def run():
         )
         
         img_name = f"food_{int(time.time())}.jpg"
-        img_dir = "images/food" # 存入美食專屬資料夾
+        img_dir = "images/food"
         
-        # 💡 終極資料夾防護機制：避免檔案衝突
         if os.path.exists(img_dir) and not os.path.isdir(img_dir):
             print(f"⚠️ 發現同名檔案，正在清空以建立正確的資料夾...")
             os.remove(img_dir)
