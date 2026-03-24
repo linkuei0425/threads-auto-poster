@@ -1,6 +1,10 @@
 name: Threads Auto Poster
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 保留手動觸發按鈕，方便你隨時測試
+  schedule:
+    # 這是 UTC 時間的 23:00，等於台灣時間的早上 07:00
+    - cron: '0 23 * * *' 
+
 jobs:
   post:
     runs-on: ubuntu-latest
