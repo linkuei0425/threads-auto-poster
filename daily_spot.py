@@ -20,14 +20,14 @@ def run():
         
         target_cities = "曼谷、清邁、釜山、首爾、新加坡、沖繩、宮古島、福岡、大阪、京都、神戶、東京、宇治、奈良、香港、澳門"
         
-        # 💡 核心修改區：改為景點專用的 JSON 欄位與提示詞
+        # 💡 核心修改區：專業攝影與真實氛圍結合的提示詞
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇 Threads 貼文。\n"
             f"1. 從以下城市中隨機挑選一個：{target_cities}。\n"
             f"2. 挑選該城市中一個真實存在的知名地標、私房秘境或絕美打卡景點、知名夜市或市場（請勿介紹餐廳或美食）。\n"
             f"請你生成以下 6 個欄位的資料，並『嚴格』遵守各欄位的規則：\n"
             f"- caption: (主文) 第一人稱發牢騷或表達興奮，結尾拋出引發討論的問題。這裡『絕對不要』寫出如何抵達或交通方式。150字內。\n"
-            f"- image_prompt: (英文咒語) 高畫質風景攝影 (high-quality landscape photography)、光影唯美、構圖大氣。\n"
+            f"- image_prompt: (英文咒語) 為了在『專業攝影的高水準』與『真實、無AI感』之間取得完美平衡，請描述該景點的具體畫面。並且『強制』在開頭或結尾加入以下風格關鍵字：'Professional editorial travel photography, full-frame camera quality, shallow depth of field, f/1.4 aperture bokeh, candid professional look, natural light (e.g., soft golden hour, Moody overcast), realistic natural color grading, raw film textures, slight authentic film grain'. 構圖要精細（例如引導線、三分法），但呈現出的光影和質感必須是自然的真實場景，不要有任何後製過度的痕跡。並且『絕對不要』使用 '8k, masterpiece, cinematic lighting, over-processed HDR, hyper-detailed, perfect composition' 等會增加塑膠感的字眼。\n"
             f"- comment1: (第一則留言) 語氣像回覆朋友，簡單帶出景點名稱和推薦拍照點。例如『這個秘境叫 XXX... 建議下午去光線最好...』。\n"
             f"- spot_name: (景點名稱) 景點的精準名稱。\n"
             f"- transportation: (交通攻略) 詳細的自由行大眾交通方式，例如搭乘哪條地鐵、哪個出口、步行幾分鐘。越詳細越好。\n"
@@ -54,7 +54,7 @@ def run():
             sys.exit(1)
             
         caption = data.get("caption", "無法生成主文")
-        image_prompt = data.get("image_prompt", "Professional landscape photography, 8k, highly detailed")
+        image_prompt = data.get("image_prompt", "Professional travel photography, natural light, raw textures")
         comment_text = data.get("comment1", "📍 景點資訊確認中...")
         
         # 💡 在 Python 裡面強制排版第二則留言 (交通攻略)
@@ -75,7 +75,7 @@ def run():
         if len(comment2_text) > 480: comment2_text = comment2_text[:475] + "..."
 
         # --- B. Gemini 生成圖片並儲存 ---
-        print(f"🎨 正在繪製景點：{image_prompt}")
+        print(f"🎨 正在以專業攝影風格繪製景點：{image_prompt}")
         img_res = client.models.generate_content(
             model='gemini-2.5-flash-image',
             contents=image_prompt,
@@ -110,6 +110,8 @@ def run():
         
         # 在終端機印出來預覽
         print("\n--- 📝 產出預覽 ---")
+        print(f"[主文預覽]:\n{caption}\n")
+        print(f"[留言1預覽]:\n{comment_text}\n")
         print(f"[留言2預覽]:\n{comment2_text}")
 
     except Exception as e:
