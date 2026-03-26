@@ -1,4 +1,4 @@
-name: 🍴 中午小編 (全自動終極防呆版)
+name: 🍴 中午小編 (全自動終極防呆版 - 一六發文)
 
 on:
   workflow_dispatch:
@@ -61,7 +61,7 @@ jobs:
           IMG_NAME=$(cat img_name.txt)
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
-          # 💡 強制讀取文字並印出，我們可以在 Log 中直接看到文案
+          # 💡 強制讀取文字並印出，解決 curl 吞字問題
           CAPTION=$(cat caption.txt)
           COMMENT1=$(cat comment.txt)
           COMMENT2=$(cat comment2.txt)
