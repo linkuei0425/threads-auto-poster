@@ -4,6 +4,7 @@ import requests
 import sys
 import time
 import datetime
+import urllib.parse # 💡 新增：用來把空白轉換成 %20 的工具
 from google import genai
 
 # 1. 讀取 Secrets 與環境變數
@@ -60,24 +61,27 @@ def run():
         
         main_text = response.text.strip()
         
-        if len(main_text) > 480:
+        if len(main_text) > 400:
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
-            main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
+            main_text = main_text[:450] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
         # 💡 建立多圖輪播 (Carousel) 的個別圖片項目
         print(f"📸 正在打包【{target['name']}】的 {target['img_count']} 張圖片...")
         children_ids = []
         
         for i in range(1, target['img_count'] + 1):
-            # 💡 這裡已經幫你加上了「空白」，完美對應你 GitHub 上的檔名格式！
-            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']} ({i}).png"
+            # 💡 核心修改：先組合原始檔名，再用 urllib 把它編碼成網址安全格式 (空白會變成 %20)
+            raw_filename = f"{target['image_name']} ({i}).png"
+            encoded_filename = urllib.parse.quote(raw_filename)
+            image_url = f"https://linkuei0425.github.io/images/SPOT/{encoded_filename}"
+            
             print(f"  - 處理圖片 {i}/{target['img_count']}: {image_url}")
             
             # 向 Threads 註冊單張圖片
             res_item = requests.post("https://graph.threads.net/v1.0/me/threads", params={
                 'media_type': 'IMAGE', 
                 'image_url': image_url,
-                'is_carousel_item': 'true',  # 設定這是一張輪播圖
+                'is_carousel_item': 'true',
                 'access_token': THREADS_TOKEN
             }).json()
             
