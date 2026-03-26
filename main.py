@@ -4,7 +4,6 @@ import requests
 import sys
 import time
 import datetime
-import urllib.parse
 from google import genai
 
 # 1. 讀取 Secrets 與環境變數
@@ -65,19 +64,15 @@ def run():
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
             main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
-        # 💡 建立多圖輪播 (Carousel) 的個別圖片項目
         print(f"📸 正在打包【{target['name']}】的 {target['img_count']} 張圖片...")
         children_ids = []
         
         for i in range(1, target['img_count'] + 1):
-            # 💡 最終修改：這裡的檔名格式已經改為沒有空白的模式 (例如 Seoul(1).png)
-            raw_filename = f"{target['image_name']}({i}).png"
-            encoded_filename = urllib.parse.quote(raw_filename)
-            image_url = f"https://linkuei0425.github.io/images/SPOT/{encoded_filename}"
+            # 💡 乾淨俐落的網址，不加任何編碼，直接對應你修改好的檔名
+            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}({i}).png"
             
             print(f"  - 處理圖片 {i}/{target['img_count']}: {image_url}")
             
-            # 向 Threads 註冊單張圖片
             res_item = requests.post("https://graph.threads.net/v1.0/me/threads", params={
                 'media_type': 'IMAGE', 
                 'image_url': image_url,
@@ -94,10 +89,8 @@ def run():
             print("❌ 所有圖片都建立失敗，程式結束。")
             sys.exit(1)
             
-        # 將成功建立的圖片 IDs 用逗號組合起來
         children_str = ",".join(children_ids)
 
-        # 📤 1. 建立輪播主貼文容器
         print(f"📤 1. 正在建立主貼文容器 (Carousel 多圖輪播)...")
         res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
             'media_type': 'CAROUSEL', 
@@ -107,7 +100,6 @@ def run():
         }).json()
         
         if 'id' in res_main:
-            # 發布主貼文
             publish_main = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                 'creation_id': res_main['id'], 
                 'access_token': THREADS_TOKEN
@@ -120,11 +112,9 @@ def run():
                 
             print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
             
-            # ⏳ 加長煞車時間
             print("⏳ 等待 15 秒鐘，讓 Meta 伺服器建檔你的貼文...")
             time.sleep(15)
             
-            # 📤 2. 建立留言容器
             print("📤 2. 正在建立留言區...")
             reply_text = f"👍 留言給我，我就會把【{target['name']}】的免費 APP 連結傳給你囉！"
             
@@ -139,7 +129,6 @@ def run():
                 print("⏳ 留言容器已建立，等待 5 秒鐘進行最終發布...")
                 time.sleep(5) 
                 
-                # 發布留言
                 publish_reply = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
                     'creation_id': res_reply['id'], 
                     'access_token': THREADS_TOKEN
