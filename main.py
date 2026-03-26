@@ -68,8 +68,8 @@ def run():
         children_ids = []
         
         for i in range(1, target['img_count'] + 1):
-            # 💡 乾淨俐落的網址，不加任何編碼，直接對應你修改好的檔名
-            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}({i}).png"
+            # 💡 終極正確的網址路徑，包含專案名稱與 SPOT 資料夾，且對應你乾淨無空白的檔名！
+            image_url = f"https://linkuei0425.github.io/threads-auto-poster/images/SPOT/{target['image_name']}({i}).png"
             
             print(f"  - 處理圖片 {i}/{target['img_count']}: {image_url}")
             
