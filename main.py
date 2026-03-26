@@ -60,17 +60,17 @@ def run():
         
         main_text = response.text.strip()
         
-        if len(main_text) > 430:
+        if len(main_text) > 480:
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
-            main_text = main_text[:450] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
+            main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
         # 💡 建立多圖輪播 (Carousel) 的個別圖片項目
         print(f"📸 正在打包【{target['name']}】的 {target['img_count']} 張圖片...")
         children_ids = []
         
         for i in range(1, target['img_count'] + 1):
-            # 檔名已全面改為 .png
-            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}({i}).png"
+            # 💡 這裡已經幫你加上了「空白」，完美對應你 GitHub 上的檔名格式！
+            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']} ({i}).png"
             print(f"  - 處理圖片 {i}/{target['img_count']}: {image_url}")
             
             # 向 Threads 註冊單張圖片
