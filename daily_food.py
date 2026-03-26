@@ -12,14 +12,14 @@ def run():
         if not GEMINI_KEY: raise Exception("缺少 GEMINI_API_KEY")
         client = genai.Client(api_key=GEMINI_KEY)
 
-        # 1. 改為日期命名，防止重複生圖扣錢
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        # 💡 加上 _fixed 強制繞過剛剛 GitHub 上的錯誤舊圖片，重跑一次
+        today_str = datetime.now().strftime("%Y-%m-%d_fixed")
         img_name = f"food_{today_str}.jpg"
         img_dir = "images/food"
         os.makedirs(img_dir, exist_ok=True)
         local_img_path = f"{img_dir}/{img_name}"
 
-        # 2. 升級版止血鎖：檢查圖片存在，"且" 文案檔裡面確實有字 (>10 bytes)
+        # 止血鎖：檢查圖片存在，且文案確實有字
         is_text_valid = os.path.exists("caption.txt") and os.path.getsize("caption.txt") > 10
         
         if os.path.exists(local_img_path) and is_text_valid:
@@ -35,7 +35,7 @@ def run():
             f"挑選該城市中一家真實存在的特色必吃美食或隱藏版餐廳。\n"
             f"請你生成以下 6 個欄位的資料，並『嚴格』遵守各欄位的規則：\n"
             f"- caption: 第一人稱發牢騷或表達興奮，結尾拋出引發討論的問題。絕對不要寫地址。150字內。\n"
-            f"- image_prompt: 具體專業的英文美食攝影咒語。'Professional candid food photography, shot on a full-frame camera with a 50mm f/1.8 lens. Natural bokeh background, soft natural window light. Include small, realistic food imperfections. DO NOT use AI, CGI, render, perfect, flawless, 8k, photorealistic.'\n"
+            f"- image_prompt: (英文咒語) 🚨這非常重要！你必須先用英文具體且詳細描述『該道美食的特寫畫面與食材組成』，然後再將這段風格指令接在後面：'Professional candid food photography, shot on a full-frame camera with a 50mm f/1.8 lens. Natural bokeh background, soft natural window light. Include small, realistic food imperfections.'\n"
             f"- comment1: 語氣像回覆朋友，簡單帶出店名和必點菜色。\n"
             f"- store_name: 餐廳的精準名稱。\n"
             f"- address: 餐廳的真實詳細地址。\n"
@@ -51,7 +51,6 @@ def run():
         
         data = json.loads(res.text)
         
-        # 3. 強制防護：萬一 AI 偷懶沒寫，強制塞入預設文字，避免 Threads 變成無字天書
         caption = data.get("caption") or "這家美食真的太推了！大家有吃過嗎？"
         comment_text = data.get("comment1") or "真的超好吃，推薦給大家！"
         store_name = data.get("store_name") or "神秘美食"
@@ -64,10 +63,12 @@ def run():
             f"📍 Google Maps 搜尋關鍵字：{google_maps_keyword}"
         )
 
-        # 嚴格字數限制 (防止 Threads API 報錯)
         if len(caption) > 480: caption = caption[:475] + "..."
         if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
         if len(comment2_text) > 480: comment2_text = comment2_text[:475] + "..."
+
+        # 💡 將 AI 生成的圖片咒語印在 Log 裡，方便我們檢查它有沒有寫對食物
+        print(f"🎨 最終影像咒語為：{data.get('image_prompt')}")
 
         image_prompt = data.get("image_prompt", "Professional food photography...")
         img_res = client.models.generate_content(
@@ -81,7 +82,6 @@ def run():
                 part.as_image().save(local_img_path)
                 break
 
-        # 寫入暫存檔
         with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_name)
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment_text)
