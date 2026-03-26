@@ -3,21 +3,32 @@ import random
 import requests
 import sys
 import time
+import datetime
 from google import genai
 
-# 1. 讀取 Secrets
+# 1. 讀取 Secrets 與環境變數
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
+EVENT_NAME = os.getenv("GITHUB_EVENT_NAME") # 用來判斷是不是手動點擊
 
+# --- 隔週五發文判斷邏輯 ---
+# 獲取當前的週數 (一年有 52 週)
+current_week = datetime.datetime.now().isocalendar()[1]
+# 如果是偶數週，且「不是」手動觸發，就跳過不發文 (達到隔週發的效果)
+if EVENT_NAME != "workflow_dispatch" and current_week % 2 != 0:
+    print(f"💡 目前為第 {current_week} 週 (奇數週)，今日休息不發文！")
+    sys.exit(0)
+
+# 2. 城市與對應的圖片檔名清單
 CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
-    {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
-    {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "url": "https://linkuei0425.github.io/Seoul/"},
-    {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "url": "https://linkuei0425.github.io/Busan/"},
-    {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "url": "https://linkuei0425.github.io/Okinawa/"},
-    {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "url": "https://linkuei0425.github.io/Singapore/"},
-    {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "url": "https://linkuei0425.github.io/FUKUOKA/"},
-    {"name": "京・阪・神通", "topic": "京都花見小路、大阪心齋橋與環球影城", "url": "https://linkuei0425.github.io/Osaka/"}
+    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "image_name": "BANGKOK"},
+    {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "image_name": "ChiangMai"},
+    {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "image_name": "Seoul"},
+    {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "image_name": "Busan"},
+    {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "image_name": "Okinawa"},
+    {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "image_name": "Singapore"},
+    {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "image_name": "FUKUOKA"},
+    {"name": "京・阪・神通", "topic": "京都花見小路、大阪心齋橋與環球影城", "image_name": "Osaka"}
 ]
 
 def run():
@@ -25,9 +36,8 @@ def run():
         client = genai.Client(api_key=GEMINI_KEY)
         target = random.choice(CITIES)
 
-        print(f"🎲 準備為【{target['name']}】生成「痛點開場+結尾呼籲分享」純文字行銷貼文...")
+        print(f"🎲 準備為【{target['name']}】生成「圖文行銷貼文」...")
 
-        # 💡 大幅修改 Prompt：直接用痛點開場，將分享呼籲移到結尾，嚴禁用購物台語氣
         prompt = f"""
         你現在是「Kokko」，一個熱愛出國自由行、講話超接地氣的旅遊狂熱者。
         你要發一篇 Threads 貼文，跟大家分享你整理的專屬【免費】旅遊APP『{target['name']}』。
@@ -35,11 +45,11 @@ def run():
         📖 **本次貼文要包裝的城市亮點：** {target['topic']}
 
         📝 **撰寫要求（請完全捨棄 AI 的官方腔調與購物台推銷語氣，用白話文寫）：**
-        1. 【直接用痛點開場（非常重要）】：文章第一段『直接』抱怨自由行的痛點，像真人在發牢騷。例如：一出機場不知怎麼搭車怕被坑、找住宿怕踩雷、排行程找路找到快跟旅伴吵架等。❌ 絕對禁止使用「吼唷、看過來、挖到寶了、大放送」這種假嗨的開場白！
+        1. 【直接用痛點開場】：文章第一段『直接』抱怨自由行的痛點，像真人在發牢騷。❌ 絕對禁止使用「吼唷、看過來、挖到寶了、大放送」這種假嗨的開場白！
         2. 【解方與超強功能】：抱怨完後，自然帶出這款【完全免費】的 APP 是救星。必須明確提到它能一次解決：「機場與市內交通攻略、精選住宿推薦、必吃美食地圖、一鍵自排行程，還直接帶出完整的交通轉乘方式」。
-        3. 【城市亮點行銷】：用朋友推坑的語氣提一下 {target['topic']} 有多好玩，揉進內文中，讓人看了想馬上買機票。
-        4. 【留言解鎖與呼籲】：在介紹完之後（文章最後面），順理成章地說：「只要在下面留言『{target['name']}』，我就把這款神級免費 APP 的連結私訊給你！👇 順便把這篇轉發給那個每次出國都不排行程的雷隊友！」。
-        5. 【排版規定（嚴格遵守）】：段落與段落之間『必須空一行』！多用短句。❌ 絕對禁止使用成語或客套詞（如：深入探討、不可否認、為您帶來、彷彿）。善用 Emoji，絕對不要把文字擠成一團。
+        3. 【城市亮點行銷】：用朋友推坑的語氣提一下 {target['topic']} 有多好玩，揉進內文中。
+        4. 【留言解鎖與呼籲】：在介紹完之後（文章最後面），說：「只要在下面留言『{target['name']}』，我就把這款神級免費 APP 的連結私訊給你！👇 順便把這篇轉發給那個每次出國都不排行程的雷隊友！」。
+        5. 【排版規定】：段落與段落之間『必須空一行』！多用短句。❌ 絕對禁止使用成語或客套詞。善用 Emoji。
         6. 【結尾規定】：留完言呼籲後自然收尾，絕對不要在正文放上任何網址！
         7. 【字數限制】：總字數控制在 350 到 400 字左右（絕對不能超過 450 字）。
         8. 加上標籤 #旅遊 #自由行 #{target['name']}。
@@ -52,15 +62,18 @@ def run():
         
         main_text = response.text.strip()
         
-        # 💡 防呆機制：確保字數不會爆炸
         if len(main_text) > 480:
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
             main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
-        # 📤 1. 建立純文字主貼文
-        print("📤 1. 正在建立主貼文容器 (純文字)...")
+        # 💡 組合出對應城市的圖片 URL (假設副檔名皆為 .jpg)
+        image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}.jpg"
+
+        # 📤 1. 建立圖文主貼文容器
+        print(f"📤 1. 正在建立主貼文容器 (圖文)... \n📸 圖片網址: {image_url}")
         res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'TEXT', 
+            'media_type': 'IMAGE', 
+            'image_url': image_url,
             'text': main_text, 
             'access_token': THREADS_TOKEN
         }).json()
