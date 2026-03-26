@@ -12,23 +12,21 @@ THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
 EVENT_NAME = os.getenv("GITHUB_EVENT_NAME") # 用來判斷是不是手動點擊
 
 # --- 隔週五發文判斷邏輯 ---
-# 獲取當前的週數 (一年有 52 週)
 current_week = datetime.datetime.now().isocalendar()[1]
-# 如果是偶數週，且「不是」手動觸發，就跳過不發文 (達到隔週發的效果)
 if EVENT_NAME != "workflow_dispatch" and current_week % 2 != 0:
     print(f"💡 目前為第 {current_week} 週 (奇數週)，今日休息不發文！")
     sys.exit(0)
 
-# 2. 城市與對應的圖片檔名清單
+# 2. 城市清單 (img_count 代表該城市要抓幾張圖，Threads 最高限制為 10)
 CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "image_name": "BANGKOK"},
-    {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "image_name": "ChiangMai"},
-    {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "image_name": "Seoul"},
-    {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "image_name": "Busan"},
-    {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "image_name": "Okinawa"},
-    {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "image_name": "Singapore"},
-    {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "image_name": "FUKUOKA"},
-    {"name": "京・阪・神通", "topic": "京都花見小路、大阪心齋橋與環球影城", "image_name": "Osaka"}
+    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "image_name": "BANGKOK", "img_count": 10},
+    {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "image_name": "ChiangMai", "img_count": 9},
+    {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "image_name": "Seoul", "img_count": 9},
+    {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "image_name": "Busan", "img_count": 9},
+    {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "image_name": "Okinawa", "img_count": 9},
+    {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "image_name": "Singapore", "img_count": 9},
+    {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "image_name": "FUKUOKA", "img_count": 9},
+    {"name": "京・阪・神通", "topic": "京都花見小路、大阪心齋橋與環球影城", "image_name": "Osaka", "img_count": 9}
 ]
 
 def run():
@@ -36,7 +34,7 @@ def run():
         client = genai.Client(api_key=GEMINI_KEY)
         target = random.choice(CITIES)
 
-        print(f"🎲 準備為【{target['name']}】生成「圖文行銷貼文」...")
+        print(f"🎲 準備為【{target['name']}】生成「多圖輪播行銷貼文」...")
 
         prompt = f"""
         你現在是「Kokko」，一個熱愛出國自由行、講話超接地氣的旅遊狂熱者。
@@ -62,18 +60,44 @@ def run():
         
         main_text = response.text.strip()
         
-        if len(main_text) > 480:
+        if len(main_text) > 430:
             print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
-            main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
+            main_text = main_text[:450] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
 
-        # 💡 組合出對應城市的圖片 URL (假設副檔名皆為 .jpg)
-        image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}.jpg"
+        # 💡 建立多圖輪播 (Carousel) 的個別圖片項目
+        print(f"📸 正在打包【{target['name']}】的 {target['img_count']} 張圖片...")
+        children_ids = []
+        
+        for i in range(1, target['img_count'] + 1):
+            # 檔名已全面改為 .png
+            image_url = f"https://linkuei0425.github.io/images/SPOT/{target['image_name']}({i}).png"
+            print(f"  - 處理圖片 {i}/{target['img_count']}: {image_url}")
+            
+            # 向 Threads 註冊單張圖片
+            res_item = requests.post("https://graph.threads.net/v1.0/me/threads", params={
+                'media_type': 'IMAGE', 
+                'image_url': image_url,
+                'is_carousel_item': 'true',  # 設定這是一張輪播圖
+                'access_token': THREADS_TOKEN
+            }).json()
+            
+            if 'id' in res_item:
+                children_ids.append(res_item['id'])
+            else:
+                print(f"  ❌ 圖片 {i} 處理失敗：{res_item}")
+                
+        if not children_ids:
+            print("❌ 所有圖片都建立失敗，程式結束。")
+            sys.exit(1)
+            
+        # 將成功建立的圖片 IDs 用逗號組合起來
+        children_str = ",".join(children_ids)
 
-        # 📤 1. 建立圖文主貼文容器
-        print(f"📤 1. 正在建立主貼文容器 (圖文)... \n📸 圖片網址: {image_url}")
+        # 📤 1. 建立輪播主貼文容器
+        print(f"📤 1. 正在建立主貼文容器 (Carousel 多圖輪播)...")
         res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'IMAGE', 
-            'image_url': image_url,
+            'media_type': 'CAROUSEL', 
+            'children': children_str,
             'text': main_text, 
             'access_token': THREADS_TOKEN
         }).json()
@@ -118,7 +142,7 @@ def run():
                 }).json()
                 
                 if 'id' in publish_reply:
-                    print(f"🎉 留言發布成功！排版完美結束！")
+                    print(f"🎉 留言發布成功！多圖輪播排版完美結束！")
                 else:
                     print(f"❌ 留言【發布】失敗：{publish_reply}")
             else:
