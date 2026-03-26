@@ -3,7 +3,7 @@ name: 🍴 中午小編 (全自動終極防呆版)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 4 * * 1,6'
 
 jobs:
   build_and_post:
