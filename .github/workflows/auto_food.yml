@@ -62,14 +62,27 @@ jobs:
           IMG_NAME=$(cat img_name.txt)
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG_NAME"
           
-          # 1. 發布主貼文
+          # 💡 強制讀取文字並印在 Log 裡，方便追蹤是不是空字串
+          CAPTION=$(cat caption.txt)
+          COMMENT1=$(cat comment.txt)
+          COMMENT2=$(cat comment2.txt)
+          
+          echo "📝 準備發布的主文內容：$CAPTION"
+          
+          # 1. 發布主貼文 (改成變數傳遞，最穩定)
           echo "📤 正在建立主文..."
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=IMAGE" \
             --data-urlencode "image_url=$IMG_URL" \
-            --data-urlencode text@caption.txt \
+            --data-urlencode "text=$CAPTION" \
             --data-urlencode "access_token=$TOKEN")
+            
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then
+            echo "❌ 建立主文失敗: $RES_MAIN"
+            exit 1
+          fi
+          
           sleep 15
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
@@ -79,7 +92,7 @@ jobs:
           sleep 10
           RES_C1=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
-            --data-urlencode text@comment.txt \
+            --data-urlencode "text=$COMMENT1" \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
           C1_ID=$(echo $RES_C1 | jq -r '.id')
@@ -90,7 +103,7 @@ jobs:
           sleep 10
           RES_C2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
-            --data-urlencode text@comment2.txt \
+            --data-urlencode "text=$COMMENT2" \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
           C2_ID=$(echo $RES_C2 | jq -r '.id')
