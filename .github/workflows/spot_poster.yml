@@ -1,10 +1,10 @@
-name: ✈️ 晚間小編 (全自動終極防呆版 - 二日發文)
+name: ✈️ 晚間小編 (Gemini 2.5 景點雙留言蓋樓版 - GitHub 智慧等待版)
 
 on:
   workflow_dispatch:
   schedule:
-    # 每週日(0)、週二(2) 的 UTC 10:00 執行 (台灣時間 18:00)
-    - cron: '0 10 * * 0,2'
+    # 每天 UTC 10:00 執行 (台灣/香港時間 18:00 傍晚)
+    - cron: '0 10 * * *'
 
 jobs:
   build_and_post:
@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: '3.10'
           
-      - name: Install Dependencies
+      - name: Install
         run: pip install google-genai requests
         
       - name: Run AI script (執行景點腳本)
@@ -27,81 +27,103 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python daily_spot.py
         
-      - name: Push to GitHub (解決衝突版)
+      - name: Push Image to GitHub (推播景點圖片)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add images/spot/*.jpg *.txt
-          git commit -m "Update Spot for $(date +'%Y-%m-%d')" || echo "No changes to commit"
-          for i in {1..3}; do
-            git pull --rebase origin main
-            git push && break || sleep 15
-          done
+          git add images/SPOT/*.jpg
+          git commit -m "Update Spot Image" || echo "No changes"
+          git push
 
-      - name: Wait for GitHub Pages
+      - name: Wait for GitHub Pages to Deploy (等待景點圖片上線)
         run: |
           IMG_NAME=$(cat img_name.txt)
-          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/spot/$IMG_NAME"
-          echo "🔍 正在檢查圖片：$IMG_URL"
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG_NAME"
+          echo "🔍 正在等待圖片上線：$IMG_URL"
+          
+          # 智慧等待迴圈：最多重試 20 次，每次等 15 秒 (最長 5 分鐘)
           for i in {1..20}; do
-            if [ "$(curl -s -o /dev/null -w '%{http_code}' $IMG_URL)" == "200" ]; then
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
+            if [ "$HTTP_STATUS" == "200" ]; then
               echo "✅ 圖片已成功上線！"
-              exit 0
+              break
             fi
-            sleep 20
+            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+            sleep 15
           done
-          echo "❌ 圖片部署超時"
-          exit 1
+          # 再多等 5 秒確保快取更新
+          sleep 5
 
-      - name: Post to Threads (主文 + 雙留言)
+      - name: Post Main and Reply (發布主文與雙留言)
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
           IMG_NAME=$(cat img_name.txt)
-          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/spot/$IMG_NAME"
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG_NAME"
           
-          # 💡 強制讀取文字並印出，解決 curl 吞字問題
-          CAPTION=$(cat caption.txt)
-          COMMENT1=$(cat comment.txt)
-          COMMENT2=$(cat comment2.txt)
-          
-          echo "📝 主文內容：$CAPTION"
-          
-          echo "📤 正在建立主文..."
+          # 1. 發布主貼文 (風景圖 + 閒聊文)
+          echo "📤 正在建立主文容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=IMAGE" \
             --data-urlencode "image_url=$IMG_URL" \
-            --data-urlencode "text=$CAPTION" \
+            --data-urlencode text@caption.txt \
             --data-urlencode "access_token=$TOKEN")
-            
+          
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
-          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then
-            echo "❌ 建立主文失敗: $RES_MAIN"
+          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then 
+            echo "❌ 主文容器建立失敗：$RES_MAIN"
             exit 1
           fi
           
           sleep 15
+          echo "📤 正在發布主文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
-          echo "✅ 主文成功: $POST_ID"
           
+          if [ "$POST_ID" == "null" ] || [ -z "$POST_ID" ]; then 
+            echo "❌ 主文發布失敗：$PUBLISH_RES"
+            exit 1
+          fi
+          echo "✅ 主文發布成功，ID: $POST_ID"
+          
+          # 2. 發布第一則留言 (閒聊推薦)
           sleep 10
-          RES_C1=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+          echo "📤 正在建立第一則留言容器..."
+          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
-            --data-urlencode "text=$COMMENT1" \
+            --data-urlencode text@comment.txt \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
-          C1_ID=$(echo $RES_C1 | jq -r '.id')
-          sleep 5
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C1_ID&access_token=$TOKEN"
           
+          COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
+          if [ "$COMMENT_ID" == "null" ] || [ -z "$COMMENT_ID" ]; then 
+            echo "❌ 留言1容器建立失敗：$RES_COMMENT"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 正在發布第一則留言..."
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+          echo "✅ 第一則留言發布成功"
+
+          # 3. 發布第二則留言 (詳細交通攻略)
           sleep 10
-          RES_C2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+          echo "📤 正在建立第二則留言容器..."
+          RES_COMMENT2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
             --data-urlencode "media_type=TEXT" \
-            --data-urlencode "text=$COMMENT2" \
+            --data-urlencode text@comment2.txt \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
-          C2_ID=$(echo $RES_C2 | jq -r '.id')
+          
+          COMMENT2_ID=$(echo $RES_COMMENT2 | jq -r '.id')
+          if [ "$COMMENT2_ID" == "null" ] || [ -z "$COMMENT2_ID" ]; then 
+            echo "❌ 留言2容器建立失敗：$RES_COMMENT2"
+            exit 1
+          fi
+          
           sleep 5
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C2_ID&access_token=$TOKEN"
-          echo "🎉 全部發布完成！"
+          echo "📤 正在發布第二則留言..."
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT2_ID&access_token=$TOKEN"
+          echo "✅ 第二則留言發布成功"
+
+          echo "🎉 全部發布完成！主文+景點雙留言蓋樓成功！"
