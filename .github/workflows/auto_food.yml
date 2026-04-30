@@ -3,7 +3,8 @@ name: 🍴 中午小編 (Gemini 2.5 留言分離版 - GitHub 智慧等待版)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * *'
+    # 每週三與週日的 UTC 04:00 執行 (台灣/香港時間 12:00 中午)
+    - cron: '0 4 * * 0,3'
 
 jobs:
   build_and_post:
