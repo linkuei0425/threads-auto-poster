@@ -152,6 +152,10 @@ def run():
                 print(f"💥 生成第 {i+1} 張圖片時發生錯誤：{e}")
                 
         # --- C. 寫入暫存檔 ---
+        # 新增：為了相容您的 GitHub Actions 檢查腳本，將第一張圖的名字寫回舊的 img_name.txt
+        if img_names:
+            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
+            
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment1_text)
