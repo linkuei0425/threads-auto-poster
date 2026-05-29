@@ -17,7 +17,6 @@ def run():
             
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # --- A. 隨機抽取地區與主題 ---
         print("🤖 系統正在隨機抽取伴手禮產地與商品主題...")
         
         regions = ["日本東京", "日本大阪", "韓國首爾", "泰國曼谷", "台灣", "香港", "新加坡", "澳洲", "法國巴黎", "德國"]
@@ -28,7 +27,6 @@ def run():
         
         print(f"🎯 本次抽中：【{selected_region}】的【{selected_theme}】，準備交由 Gemini 生成...")
         
-        # --- B. 指示 AI 生成 Threads 文案與 5 個商品的生圖咒語 ---
         task_prompt = (
             f"你是一位經驗豐富的『旅遊達人』。你要在 Threads 發布一篇 5 張圖片的多圖輪播(Carousel)貼文。\n"
             f"請針對【{selected_region}】這個地區，挑選 5 個符合【{selected_theme}】主題的真實熱門伴手禮或必買好物。\n"
@@ -41,7 +39,6 @@ def run():
             f"請務必只輸出純 JSON 格式，不要包含任何 Markdown 標記 (例如 ```json)。"
         )
         
-        # 呼叫 Gemini 2.5 Flash 生成文字內容
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
@@ -76,7 +73,6 @@ def run():
         print(f"[留言一 {len(comment_text)}字]:\n{comment_text}\n")
         print(f"[留言二 {len(comment2_text)}字]:\n{comment2_text}\n")
 
-        # --- C. 迴圈呼叫生圖模型 5 次 ---
         img_dir = "images/GIFT"
         # 清空舊資料夾，避免舊圖殘留被一起推上 GitHub
         if os.path.exists(img_dir):
@@ -115,8 +111,6 @@ def run():
                 print(f"❌ 第 {idx+1} 張圖生成失敗: {img_err}")
                 continue
                 
-        # --- D. 寫入暫存檔供 GitHub Actions 使用 ---
-        # 將圖片檔名列表寫入檔案，每行一個
         with open("img_names.txt", "w", encoding="utf-8") as f:
             for name in saved_image_names:
                 f.write(name + "\n")
