@@ -1,0 +1,99 @@
+name: 🛍️ 午茶小編 (5圖伴手禮好物 - Threads 輪播版)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * *'
+
+jobs:
+  build_and_post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Install Dependencies
+        run: pip install google-genai requests
+      - name: Run AI script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python daily_gift.py
+      - name: Push Images to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add images/GIFT/*.jpg img_names.txt caption.txt comment.txt comment2.txt
+          git commit -m "Update Gift Images and Text" || echo "No changes"
+          git push
+      - name: Wait for GitHub Pages to Deploy
+        run: |
+          IMG_ARRAY=($(cat img_names.txt))
+          for IMG_NAME in "${IMG_ARRAY[@]}"; do
+            IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/GIFT/$IMG_NAME"
+            echo "🔍 正在等待圖片上線：$IMG_URL"
+            for i in {1..20}; do
+              HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
+              if [ "$HTTP_STATUS" == "200" ]; then
+                echo "✅ 圖片已成功上線！"
+                break
+              fi
+              echo "⏳ 尚未上線... 重試 ($i/20)"
+              sleep 15
+            done
+          done
+          sleep 5
+      - name: Post Main Carousel and Reply
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          IMG_ARRAY=($(cat img_names.txt))
+          CHILDREN_IDS=""
+          echo "📤 1. 建立輪播 Items..."
+          for IMG_NAME in "${IMG_ARRAY[@]}"; do
+            IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/GIFT/$IMG_NAME"
+            RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=IMAGE" --data-urlencode "image_url=$IMG_URL" --data-urlencode "is_carousel_item=true" --data-urlencode "access_token=$TOKEN")
+            ITEM_ID=$(echo $RES_ITEM | jq -r '.id')
+            if [ "$ITEM_ID" == "null" ] || [ -z "$ITEM_ID" ]; then
+              echo "❌ 容器建立失敗：$RES_ITEM"
+              exit 1
+            fi
+            if [ -z "$CHILDREN_IDS" ]; then
+              CHILDREN_IDS="$ITEM_ID"
+            else
+              CHILDREN_IDS="$CHILDREN_IDS,$ITEM_ID"
+            fi
+            sleep 3
+          done
+          echo "📤 2. 打包 Carousel..."
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=CAROUSEL" --data-urlencode "children=$CHILDREN_IDS" --data-urlencode text@caption.txt --data-urlencode "access_token=$TOKEN")
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then
+            echo "❌ 主文容器失敗：$RES_MAIN"
+            exit 1
+          fi
+          sleep 15
+          echo "📤 發布主文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          if [ "$POST_ID" == "null" ] || [ -z "$POST_ID" ]; then
+            echo "❌ 發布失敗：$PUBLISH_RES"
+            exit 1
+          fi
+          echo "✅ 發布成功，ID: $POST_ID"
+          sleep 10
+          echo "📤 發布第一則留言..."
+          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN")
+          COMMENT_ID=$(echo $RES_COMMENT | jq -r '.id')
+          sleep 5
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+          sleep 10
+          echo "📤 發布第二則留言..."
+          RES_COMMENT2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment2.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN")
+          COMMENT2_ID=$(echo $RES_COMMENT2 | jq -r '.id')
+          sleep 5
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT2_ID&access_token=$TOKEN"
+          echo "🎉 蓋樓成功！"
