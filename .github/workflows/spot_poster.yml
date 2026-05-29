@@ -1,10 +1,10 @@
-name: ✈️ 晚間小編 (Gemini 2.5 景點雙留言蓋樓版 - GitHub 智慧等待版)
+name: ✈️ 晚間小編 (Gemini 2.5 景點雙留言蓋樓版 - 多圖輪播版)
 
 on:
   workflow_dispatch:
   schedule:
-    # 每週二與週五的 UTC 10:00 執行 (台灣/香港時間 18:00 傍晚)
-    - cron: '0 10 * * 2,5'
+    # 每週一.二與週五.六的 UTC 10:00 執行 (台灣/香港時間 18:00 傍晚)
+    - cron: '0 10 * * 1,2,5,6'
 
 jobs:
   build_and_post:
@@ -37,8 +37,11 @@ jobs:
 
       - name: Wait for GitHub Pages to Deploy (等待景點圖片上線)
         run: |
-          IMG_NAME=$(cat img_name.txt)
-          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG_NAME"
+          # 改為讀取 img_names.txt
+          IMG_NAMES=$(cat img_names.txt)
+          # 取出第一張圖片的名字來檢查上線狀態即可 (因為同批上傳的圖會一起上線)
+          FIRST_IMG=$(echo $IMG_NAMES | cut -d',' -f1)
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
           echo "🔍 正在等待圖片上線：$IMG_URL"
           
           # 智慧等待迴圈：最多重試 20 次，每次等 15 秒 (最長 5 分鐘)
@@ -54,18 +57,53 @@ jobs:
           # 再多等 5 秒確保快取更新
           sleep 5
 
-      - name: Post Main and Reply (發布主文與雙留言)
+      - name: Post Main and Reply (發布多圖主文與雙留言)
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
-          IMG_NAME=$(cat img_name.txt)
-          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG_NAME"
+          IMG_NAMES=$(cat img_names.txt)
+          echo "📸 準備發布的圖片清單：$IMG_NAMES"
           
-          # 1. 發布主貼文 (風景圖 + 閒聊文)
-          echo "📤 正在建立主文容器..."
+          # 將逗號分隔的字串轉為陣列
+          IFS=',' read -ra IMGS <<< "$IMG_NAMES"
+          
+          CHILDREN_IDS=""
+          
+          # 1. 為每一張圖片建立 Carousel Item 容器
+          echo "📤 正在建立多圖(Carousel)子項目..."
+          for IMG in "${IMGS[@]}"; do
+            IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
+            echo "處理圖片: $IMG_URL"
+            
+            RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+              --data-urlencode "media_type=IMAGE" \
+              --data-urlencode "image_url=$IMG_URL" \
+              --data-urlencode "is_carousel_item=true" \
+              --data-urlencode "access_token=$TOKEN")
+              
+            ITEM_ID=$(echo $RES_ITEM | jq -r '.id')
+            if [ "$ITEM_ID" == "null" ] || [ -z "$ITEM_ID" ]; then 
+              echo "❌ 圖片容器建立失敗：$RES_ITEM"
+              exit 1
+            fi
+            
+            # 串接 ID (用逗號隔開)
+            if [ -z "$CHILDREN_IDS" ]; then
+              CHILDREN_IDS="$ITEM_ID"
+            else
+              CHILDREN_IDS="$CHILDREN_IDS,$ITEM_ID"
+            fi
+            sleep 3
+          done
+          
+          echo "✅ 子項目建立完成，ID 列表: $CHILDREN_IDS"
+
+          # 2. 建立主要的多圖 Carousel 容器 (包含文字)
+          sleep 5
+          echo "📤 正在建立主文 Carousel 容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
-            --data-urlencode "media_type=IMAGE" \
-            --data-urlencode "image_url=$IMG_URL" \
+            --data-urlencode "media_type=CAROUSEL" \
+            --data-urlencode "children=$CHILDREN_IDS" \
             --data-urlencode text@caption.txt \
             --data-urlencode "access_token=$TOKEN")
           
@@ -75,8 +113,9 @@ jobs:
             exit 1
           fi
           
+          # 3. 實際發布主文
           sleep 15
-          echo "📤 正在發布主文..."
+          echo "📤 正在發布多圖主文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           
@@ -86,7 +125,7 @@ jobs:
           fi
           echo "✅ 主文發布成功，ID: $POST_ID"
           
-          # 2. 發布第一則留言 (閒聊推薦)
+          # 4. 發布第一則留言 (閒聊推薦)
           sleep 10
           echo "📤 正在建立第一則留言容器..."
           RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
@@ -106,7 +145,7 @@ jobs:
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
           echo "✅ 第一則留言發布成功"
 
-          # 3. 發布第二則留言 (詳細交通攻略)
+          # 5. 發布第二則留言 (詳細交通攻略)
           sleep 10
           echo "📤 正在建立第二則留言容器..."
           RES_COMMENT2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
@@ -126,4 +165,4 @@ jobs:
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT2_ID&access_token=$TOKEN"
           echo "✅ 第二則留言發布成功"
 
-          echo "🎉 全部發布完成！主文+景點雙留言蓋樓成功！"
+          echo "🎉 全部發布完成！主文多圖 + 景點雙留言蓋樓成功！"
