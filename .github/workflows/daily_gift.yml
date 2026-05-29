@@ -1,4 +1,4 @@
-name: 🛍️ 午茶小編 (5圖伴手禮好物 - Threads 輪播版)
+name: 🛍️ 伴手禮小編 (5圖伴手禮好物 - Threads 輪播版)
 
 on:
 workflow_dispatch:
@@ -31,8 +31,8 @@ steps:
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      git add images/GIFT/*.jpg
-      git commit -m "Update Gift Images" || echo "No changes"
+      git add images/GIFT/*.jpg img_names.txt caption.txt comment.txt comment2.txt
+      git commit -m "Update Gift Images and Text" || echo "No changes"
       git push
 
   - name: Wait for GitHub Pages to Deploy (等待多張圖片上線)
