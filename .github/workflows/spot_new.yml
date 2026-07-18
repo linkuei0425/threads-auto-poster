@@ -1,35 +1,10 @@
-name: Spot Auto Poster New
-
-on:
-workflow_dispatch:
-schedule:
-- cron: '0 10 * * 1,5'
-
-concurrency:
-group: "auto-poster-queue"
-cancel-in-progress: false
-
-STREAMING_CHUNK:Defining the build job and initial environment setup...
-
-jobs:
-build:
-runs-on: ubuntu-latest
-permissions:
-contents: write
-steps:
-- name: Checkout Repository
-uses: actions/checkout@v4
-
-  - name: Setup Python
+name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
 
   - name: Install dependencies
     run: pip install google-genai requests pillow
-
-
-STREAMING_CHUNK:Running the Python script and committing changes...
 
   - name: Run Script
     env:
@@ -44,9 +19,6 @@ STREAMING_CHUNK:Running the Python script and committing changes...
       git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
       git pull --rebase origin main || true
       git push
-
-
-STREAMING_CHUNK:Waiting for GitHub Pages deployment to complete...
 
   - name: Wait for GitHub Pages to Deploy
     run: |
@@ -68,9 +40,6 @@ STREAMING_CHUNK:Waiting for GitHub Pages deployment to complete...
         sleep 15
       done
       sleep 10
-
-
-STREAMING_CHUNK:Posting Carousel and Comments to Threads...
 
   - name: Post to Threads (Carousel + 10 Comments)
     env:
@@ -116,9 +85,6 @@ STREAMING_CHUNK:Posting Carousel and Comments to Threads...
         fi
       done
 
-
-STREAMING_CHUNK:Posting Carousel to Instagram...
-
   - name: Post to Instagram (Carousel)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
@@ -152,9 +118,6 @@ STREAMING_CHUNK:Posting Carousel to Instagram...
       curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
       echo "✅ [IG] 輪播圖發布指令已送出！"
 
-
-STREAMING_CHUNK:Posting Multi-Photo feed to Facebook Page...
-
   - name: Post to Facebook Page (Multi-Photo)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
@@ -181,5 +144,4 @@ STREAMING_CHUNK:Posting Multi-Photo feed to Facebook Page...
       echo "📤 [FB] 正在發布多圖貼文..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
       echo "✅ [FB] 發布指令已送出！"
-
 
