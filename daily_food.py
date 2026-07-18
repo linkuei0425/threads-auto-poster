@@ -41,7 +41,7 @@ def post_to_fb_and_ig(text, image_paths):
             if ig_id:
                 time.sleep(3) 
                 ig_media_containers = []
-                for m_id in fb_media_ids[:10]:
+                for m_id in fb_media_ids[:8]:
                     photo_data = requests.get(f"https://graph.facebook.com/v19.0/{m_id}?fields=images&access_token={fb_token}").json()
                     source_url = photo_data.get("images", [{}])[0].get("source")
                     if source_url:
@@ -74,7 +74,7 @@ def run():
         if not GEMINI_KEY: raise Exception("缺少 GEMINI_API_KEY")
         client = genai.Client(api_key=GEMINI_KEY)
         
-        selected_city = "東京"
+        selected_city = "東京" # 預設城市
         if os.path.exists("city.txt"):
             with open("city.txt", "r", encoding="utf-8") as f:
                 selected_city = f.read().strip()
@@ -93,7 +93,7 @@ def run():
             f"- restaurants: (8 個餐廳的陣列)\n"
             f"  - store_name: 餐廳名稱\n"
             f"  - theme: 餐廳對應主題\n"
-            f"  - image_prompt: 『強制』在開頭加入：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight or warm ambient. Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look.'\n"
+            f"  - image_prompt: 『強制』在開頭加入：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight or warm ambient. Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look.' 描述具體畫面，絕不要使用強調完美或AI生成的字眼。\n"
             f"  - address: 真實詳細地址\n"
             f"  - google_maps_keyword: Google Maps 搜尋關鍵字\n\n"
             f"請務必以純 JSON 格式輸出，全中文(image_prompt除外)。"
@@ -119,7 +119,6 @@ def run():
 
         img_dir = "images/food"
         os.makedirs(img_dir, exist_ok=True)
-        # 清除舊照片
         for f in os.listdir(img_dir):
             os.remove(os.path.join(img_dir, f))
             
@@ -150,7 +149,6 @@ def run():
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption[:480])
         
-        # 清除舊的 comment*.txt
         for file in os.listdir("."):
             if file.startswith("comment") and file.endswith(".txt"): os.remove(file)
             
