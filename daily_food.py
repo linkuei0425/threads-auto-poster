@@ -10,7 +10,6 @@ from google.genai import types
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def post_to_fb_and_ig(text, image_paths):
-    """使用 Facebook Graph API 將產生的圖文發布至 FB 與 IG"""
     if not image_paths:
         return
 
@@ -19,10 +18,10 @@ def post_to_fb_and_ig(text, image_paths):
     ig_id = os.getenv("IG_ACCOUNT_ID")
 
     if not fb_token or not page_id:
-        print("⚠️ 未找到 FB Token 或 Page ID。略過 FB/IG 發佈。")
+        print("⚠️ 未找到 FB Token，略過 FB/IG 發佈。")
         return
 
-    print("🚀 餐廳模組 - 開始發布至 Facebook 與 Instagram...")
+    print("🚀 餐廳模組 - 開始發布至 FB/IG...")
     try:
         fb_media_ids = []
         for img_path in image_paths:
@@ -39,8 +38,7 @@ def post_to_fb_and_ig(text, image_paths):
             for i, m_id in enumerate(fb_media_ids):
                 post_payload[f"attached_media[{i}]"] = f'{{"media_fbid":"{m_id}"}}'
             fb_post_res = requests.post(post_url, data=post_payload).json()
-            print(f"✅ FB 發布狀態: {fb_post_res.get('id', fb_post_res)}")
-
+            
             if ig_id:
                 time.sleep(3) 
                 ig_media_containers = []
@@ -68,7 +66,7 @@ def post_to_fb_and_ig(text, image_paths):
                     if creation_id:
                         time.sleep(10)
                         pub_res = requests.post(f"https://graph.facebook.com/v19.0/{ig_id}/media_publish", data={"creation_id": creation_id, "access_token": fb_token}).json()
-                        print(f"✅ IG 發布狀態: {pub_res.get('id', pub_res)}")
+                        print("✅ FB/IG 多圖發布成功")
     except Exception as e:
         print(f"💥 FB/IG 發布錯誤：{e}")
 
@@ -77,12 +75,12 @@ def run():
         if not GEMINI_KEY: raise Exception("缺少 GEMINI_API_KEY")
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # 讀取昨天的城市 (若檔案不存在則隨機抽取保底)
         selected_city = "東京"
         if os.path.exists("city.txt"):
             with open("city.txt", "r", encoding="utf-8") as f:
                 selected_city = f.read().strip()
-        print(f"🎯 本次將針對昨天抽中的城市：【{selected_city}】生成 8 間美食！")
+                
+        print(f"🎯 啟動連動機制！將針對昨天抽中的城市：【{selected_city}】生成 8 間美食！")
         
         themes = ["在地人推薦街頭小吃", "必吃百年老店", "視覺系網美甜點", "深夜排隊宵夜", "隱藏版巷弄美食", "高CP值平價美食", "傳統市場必吃", "在地特色咖啡廳"]
         themes_str = "、".join(themes)
@@ -96,10 +94,10 @@ def run():
             f"- restaurants: (8 個餐廳的陣列)\n"
             f"  - store_name: 餐廳名稱\n"
             f"  - theme: 餐廳對應主題\n"
-            f"  - image_prompt: 『強制』在開頭加入：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight or warm ambient. Realistic textures, True-to-life colors, no over-saturation, no HDR look.'\n"
+            f"  - image_prompt: 『強制』在開頭加入：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight or warm ambient. Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look.'\n"
             f"  - address: 真實詳細地址\n"
             f"  - google_maps_keyword: Google Maps 搜尋關鍵字\n\n"
-            f"請務必以純 JSON 格式輸出，不要 Markdown 標記。全中文(image_prompt除外)。"
+            f"請務必以純 JSON 格式輸出，全中文(image_prompt除外)。"
         )
         
         res = client.models.generate_content(
@@ -129,7 +127,10 @@ def run():
             try:
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image', contents=r.get("image_prompt"),
-                    config=types.GenerateContentConfig(response_modalities=["IMAGE"], image_config=types.ImageConfig(aspect_ratio="9:16"))
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"], 
+                        image_config=types.ImageConfig(aspect_ratio="9:16")
+                    )
                 )
                 img_name = f"food_{int(time.time())}_{i}.jpg"
                 local_img_path = f"{img_dir}/{img_name}"
