@@ -140,15 +140,18 @@ def run():
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
         ]
         
-        # 擴充為 10 個主題
         themes = [
             "歷史古蹟", "文青巷弄", "自然絕景", "網美打卡", "當地人私房秘境", 
             "浪漫夜景", "購物商圈", "市集或市場或夜市", "特色建築", "藝術展區"
         ]
         
+        # 決定城市並記錄下來供美食腳本讀取
         selected_city = random.choice(target_cities)
         themes_str = "、".join(themes)
         
+        with open("selected_city.txt", "w", encoding="utf-8") as f:
+            f.write(selected_city)
+            
         print(f"🎯 本次抽中：【{selected_city}】，準備交由 Gemini 生成涵蓋 10 大主題的景點...")
         
         task_prompt = (
@@ -161,7 +164,7 @@ def run():
             f"- spots: (這是一個包含 10 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
             f"  - spot_name: (景點名稱) 景點的精準名稱。\n"
             f"  - spot_theme: (所屬主題) 標明這個景點是對應哪一個主題（例如填入：市集或市場或夜市）。\n"
-            f"  - image_prompt: (英文咒語) 為了在『專業攝影的高水準』與『真實、無AI感』之間取得完美平衡，請描述該景點的具體畫面。並且『強制』在開頭或結尾加入以下風格關鍵字：'Professional editorial travel photography, full-frame camera quality, shallow depth of field, f/1.4 aperture bokeh, candid professional look, natural light (e.g., soft golden hour, Moody overcast), realistic natural color grading, raw film textures, slight authentic film grain'. 構圖要精細（例如引導線、三分法），但呈現出的光影和質感必須是自然的真實場景，不要有任何後製過度的痕跡。並且『絕對不要』使用 '8k, masterpiece, cinematic lighting, over-processed HDR, hyper-detailed, perfect composition' 等會增加塑膠感的字眼。\n"
+            f"  - image_prompt: (英文咒語) 為了在『專業攝影的高水準』與『真實、無AI感』之間取得完美平衡，請描述該景點的具體畫面。並且『強制』加入以下風格關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, similar lighting to image_1.png, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 構圖要精細，但呈現出的光影和質感必須是自然的真實場景，不要有任何後製過度的痕跡。並且『絕對不要』使用 '8k, masterpiece, cinematic lighting, over-processed HDR, hyper-detailed, perfect composition' 等會增加塑膠感的字眼。\n"
             f"  - transportation: (交通攻略) 詳細的自由行大眾交通方式，例如搭乘哪條地鐵、哪個出口、步行幾分鐘。越詳細越好。\n"
             f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這個景點的關鍵字。\n\n"
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。並且確保所有輸出內容（除了 image_prompt 外）都必須是全中文。"
@@ -192,7 +195,6 @@ def run():
             
         if len(caption) > 480: caption = caption[:475] + "..."
         
-        # 動態產生最多 10 則留言，每則留言放一個景點
         comment_texts = []
         for i, spot in enumerate(spots):
             spot_name = spot.get("spot_name", "未知景點")
@@ -213,7 +215,6 @@ def run():
             if len(c_text) > 480: c_text = c_text[:475] + "..."
             comment_texts.append(c_text)
 
-        # 將主文與所有交通留言合併，專門給沒有字數限制的 FB / IG 使用
         fb_ig_caption = caption + "\n\n" + "\n\n".join(comment_texts)
 
         img_dir = "images/SPOT"
@@ -223,21 +224,22 @@ def run():
         os.makedirs(img_dir, exist_ok=True)
         
         img_names = []
-        local_img_paths = [] # 追蹤本地圖片路徑供 FB/IG 函數上傳用
+        local_img_paths = [] 
         
         for i, spot in enumerate(spots[:10]):
             image_prompt = spot.get("image_prompt")
             if not image_prompt:
                 continue
                 
-            print(f"🎨 正在以專業攝影風格繪製第 {i+1} 個景點 ({spot.get('spot_theme', '未知主題')})...")
+            print(f"🎨 正在以真實手機攝影風格繪製第 {i+1} 個景點 ({spot.get('spot_theme', '未知主題')})...")
             try:
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="1:1")
+                        # 💡 確保這裡產出的圖片為直立的 9:16
+                        image_config=types.ImageConfig(aspect_ratio="9:16")
                     )
                 )
                 
@@ -260,14 +262,12 @@ def run():
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         
-        # 寫入多達 10 則的留言檔 (保留原本 comment.txt 及 comment2.txt 的命名規律)
         for i, text in enumerate(comment_texts):
             file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
             with open(file_name, "w", encoding="utf-8") as f: f.write(text)
             
         print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
 
-        # 觸發發文到 FB 與 IG
         post_to_fb_and_ig(fb_ig_caption, local_img_paths)
 
     except Exception as e:
