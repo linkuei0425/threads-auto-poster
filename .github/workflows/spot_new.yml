@@ -56,7 +56,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
-        ID=$(echo$RES | jq -r '.id')
+        ID=$(echo "$RES" | jq -r '.id')
         if [ "$ID" != "null" ] && [ -n "$ID" ]; then
           CHILDREN="${CHILDREN}${ID},"
         fi
@@ -66,12 +66,12 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       sleep 15
       echo "📤 [Threads] 正在建立輪播主文..."
       RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
+      MAIN_ID=$(echo "$RES_MAIN" | jq -r '.id')
       
       sleep 15
       echo "📤 [Threads] 正在正式發布貼文..."
       PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
-      POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
+      POST_ID=$(echo "$PUBLISH_RES" | jq -r '.id')
       echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
       
       echo "📤 [Threads] 準備依序發布 10 則交通資訊留言..."
@@ -101,7 +101,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
-        ID=$(echo$RES | jq -r '.id')
+        ID=$(echo "$RES" | jq -r '.id')
         if [ "$ID" != "null" ] && [ -n "$ID" ]; then
           CHILDREN="${CHILDREN}${ID},"
         fi
@@ -111,7 +111,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       sleep 20
       echo "📤 [IG] 正在建立輪播主文..."
       RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
+      MAIN_ID=$(echo "$RES_MAIN" | jq -r '.id')
       
       sleep 15
       echo "📤 [IG] 正在正式發布貼文..."
@@ -134,7 +134,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$META_TOKEN")
-        PHOTO_ID=$(echo$RES | jq -r '.id')
+        PHOTO_ID=$(echo "$RES" | jq -r '.id')
         if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
           ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
         fi
