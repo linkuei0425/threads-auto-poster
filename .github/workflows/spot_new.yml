@@ -1,12 +1,11 @@
-name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
+STREAMING_CHUNK:Configuring GitHub Action triggers and job settings...name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'concurrency:group: "auto-poster-queue"cancel-in-progress: falseSTREAMING_CHUNK:Defining the build job and initial environment setup...jobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
 
   - name: Install dependencies
     run: pip install google-genai requests pillow
-
-  - name: Run Script
+STREAMING_CHUNK:Running the Python script and committing changes...  - name: Run Script
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     run: python daily_spot.py
@@ -19,8 +18,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
       git pull --rebase origin main || true
       git push
-
-  - name: Wait for GitHub Pages to Deploy
+STREAMING_CHUNK:Waiting for GitHub Pages deployment to complete...  - name: Wait for GitHub Pages to Deploy
     run: |
       OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
       REPO=$(basename "${{ github.repository }}")
@@ -40,8 +38,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
         sleep 15
       done
       sleep 10
-
-  - name: Post to Threads (Carousel + 10 Comments)
+STREAMING_CHUNK:Posting Carousel and Comments to Threads...  - name: Post to Threads (Carousel + 10 Comments)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
@@ -84,8 +81,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
           sleep 5
         fi
       done
-
-  - name: Post to Instagram (Carousel)
+STREAMING_CHUNK:Posting Carousel to Instagram...  - name: Post to Instagram (Carousel)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
       IG_ID: ${{ secrets.IG_USER_ID }}
@@ -117,8 +113,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       echo "📤 [IG] 正在正式發布貼文..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
       echo "✅ [IG] 輪播圖發布指令已送出！"
-
-  - name: Post to Facebook Page (Multi-Photo)
+STREAMING_CHUNK:Posting Multi-Photo feed to Facebook Page...  - name: Post to Facebook Page (Multi-Photo)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
       FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
