@@ -1,15 +1,12 @@
-name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configuring cron schedule for Monday and Friday- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:# STREAMING_CHUNK:Checking out the repository- name: Checkout Repositoryuses: actions/checkout@v4  # STREAMING_CHUNK:Setting up Python environment
-  - name: Setup Python
+GitHub Action Workflow for Spot Postername: Spot Auto Posteron:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
       
-  # STREAMING_CHUNK:Installing Python dependencies
   - name: Install Dependencies
     run: pip install google-genai requests
     
-  # STREAMING_CHUNK:Executing the daily spot generation script
-  - name: Run AI Script (執行景點腳本)
+  - name: Run Spot Script
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
@@ -17,48 +14,43 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_spot.py
     
-  # STREAMING_CHUNK:Committing generated images and texts to GitHub
-  - name: Push Images and City Setup to GitHub
+  - name: Push Images to GitHub
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
       git add images/SPOT/*.jpg city.txt img_names.txt caption.txt comment*.txt
-      git commit -m "Update Spot Images and Texts" || echo "No changes to commit"
+      git commit -m "Update Spot Images and Data" || echo "No changes to commit"
       git push
 
-  # STREAMING_CHUNK:Waiting for GitHub Pages to deploy the images
-  - name: Wait for GitHub Pages to Deploy
+  - name: Wait for GitHub Pages
     run: |
       if [ ! -f "img_names.txt" ]; then
-        echo "❌ 找不到 img_names.txt，中斷執行。"
+        echo "❌ No img_names.txt found."
         exit 1
       fi
-      
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       FIRST_IMG="${IMGS[0]}"
       
       if [ -z "$FIRST_IMG" ]; then
-        echo "❌ 第一張圖片名稱為空，中斷執行。"
+        echo "❌ No image found in list."
         exit 1
       fi
 
       IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
-      echo "🔍 正在等待第一張圖片上線：$IMG_URL"
-      
+      echo "🔍 Waiting for image: $IMG_URL"
       for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$IMG_URL")
         if [ "$HTTP_STATUS" == "200" ]; then
-          echo "✅ 圖片已成功上線！"
+          echo "✅ Image is live!"
           break
         fi
-        echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+        echo "⏳ Not live yet ($HTTP_STATUS). Retrying... ($i/20)"
         sleep 15
       done
       sleep 5
 
-  # STREAMING_CHUNK:Posting the main thread and comments via API
-  - name: Post Main and Reply to Threads
+  - name: Post Threads & Comments
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
@@ -66,7 +58,7 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       CHILDREN_IDS=""
       
-      echo "📤 正在建立多圖子項目..."
+      echo "📤 Creating Carousel Items..."
       for IMG in "${IMGS[@]}"; do
         if [ -n "$IMG" ]; then
           IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
@@ -75,7 +67,6 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
             --data-urlencode "image_url=$IMG_URL" \
             --data-urlencode "is_carousel_item=true" \
             --data-urlencode "access_token=$TOKEN")
-            
           ITEM_ID=$(echo$RES_ITEM | jq -r '.id // empty')
           if [ -n "$ITEM_ID" ]; then
             if [ -z "$CHILDREN_IDS" ]; then
@@ -89,12 +80,12 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
       done
 
       if [ -z "$CHILDREN_IDS" ]; then
-         echo "❌ 建立圖片容器失敗！"
+         echo "❌ Failed to create carousel items."
          exit 1
       fi
 
       sleep 5
-      echo "📤 正在發布主文..."
+      echo "📤 Posting Main Thread..."
       RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
         --data-urlencode "media_type=CAROUSEL" \
         --data-urlencode "children=$CHILDREN_IDS" \
@@ -103,7 +94,7 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id // empty')
       
       if [ -z "$MAIN_ID" ]; then
-         echo "❌ 主文容器建立失敗！$RES_MAIN"
+         echo "❌ Failed to create main thread container."
          exit 1
       fi
 
@@ -112,13 +103,13 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
       POST_ID=$(echo$PUBLISH_RES | jq -r '.id // empty')
       
       if [ -z "$POST_ID" ]; then
-        echo "❌ 發布失敗！"
-        exit 1
+         echo "❌ Failed to publish main thread."
+         exit 1
       fi
       
-      echo "✅ 主文發布成功，ID: $POST_ID"
+      echo "✅ Main thread published: $POST_ID"
       
-      echo "💬 開始發布留言..."
+      echo "💬 Posting 8 Comments..."
       for i in {1..8}; do
         if [ "$i" -eq 1 ]; then COMMENT_FILE="comment.txt"; else COMMENT_FILE="comment${i}.txt"; fi
 
@@ -134,11 +125,10 @@ name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configurin
           if [ -n "$COMMENT_ID" ]; then
             sleep 5
             curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
-            echo "✅ 第 $i 則留言發布成功"
+            echo "✅ Comment $i published."
           fi
-        else
-          break
         fi
       done
-      echo "🎉 全部發布完成！"
+      echo "🎉 All Done!"
+
 
