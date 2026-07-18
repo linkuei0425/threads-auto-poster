@@ -1,12 +1,15 @@
-name: 景點 Auto Posteron:workflow_dispatch:schedule:# 每週一、週五的 UTC 10:00 (台灣時間 18:00) 執行- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
+name: Spot Auto Posteron:workflow_dispatch:schedule:# STREAMING_CHUNK:Configuring cron schedule for Monday and Friday- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:# STREAMING_CHUNK:Checking out the repository- name: Checkout Repositoryuses: actions/checkout@v4  # STREAMING_CHUNK:Setting up Python environment
+  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
       
+  # STREAMING_CHUNK:Installing Python dependencies
   - name: Install Dependencies
     run: pip install google-genai requests
     
-  - name: Run AI Script (執行景點腳本與 FB/IG 發佈)
+  # STREAMING_CHUNK:Executing the daily spot generation script
+  - name: Run AI Script (執行景點腳本)
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
@@ -14,6 +17,7 @@ name: 景點 Auto Posteron:workflow_dispatch:schedule:# 每週一、週五的 UT
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_spot.py
     
+  # STREAMING_CHUNK:Committing generated images and texts to GitHub
   - name: Push Images and City Setup to GitHub
     run: |
       git config --global user.name "github-actions[bot]"
@@ -22,6 +26,7 @@ name: 景點 Auto Posteron:workflow_dispatch:schedule:# 每週一、週五的 UT
       git commit -m "Update Spot Images and Texts" || echo "No changes to commit"
       git push
 
+  # STREAMING_CHUNK:Waiting for GitHub Pages to deploy the images
   - name: Wait for GitHub Pages to Deploy
     run: |
       if [ ! -f "img_names.txt" ]; then
@@ -52,6 +57,7 @@ name: 景點 Auto Posteron:workflow_dispatch:schedule:# 每週一、週五的 UT
       done
       sleep 5
 
+  # STREAMING_CHUNK:Posting the main thread and comments via API
   - name: Post Main and Reply to Threads
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
