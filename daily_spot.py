@@ -262,7 +262,7 @@ def run():
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         
-        # 寫入多達 10 則的留言檔 (保留原本 comment.txt 及 comment2.txt 的命名規律)
+        # 寫入多達 10 則的留言檔
         for i, text in enumerate(comment_texts):
             file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
             with open(file_name, "w", encoding="utf-8") as f: f.write(text)
