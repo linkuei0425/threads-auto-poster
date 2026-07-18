@@ -1,10 +1,10 @@
-name: 🍴 中午小編 (Gemini 2.5 美食連動 - FB/IG/Threads 三平台八圖版)
+name: ✈️ 晚間小編 (Gemini 2.5 景點連動 - FB/IG/Threads 三平台多圖版)
 
 on:
 workflow_dispatch:
 schedule:
-# 💡 完美對應景點：景點為週一、五；美食則改為隔天的週二、六 UTC 04:00 (台灣時間 12:00)
-- cron: '0 4 * * 2,6'
+# 💡 每週一、五執行 (對應美食的二、六) UTC 10:00 (台灣時間 18:00)
+- cron: '0 10 * * 1,5'
 
 jobs:
 build_and_post:
@@ -22,25 +22,27 @@ steps:
   - name: Install Dependencies
     run: pip install google-genai requests
     
-  - name: Run AI script (執行連動美食腳本)
+  # STREAMING_CHUNK: 執行 Python 腳本與推播圖片
+  - name: Run AI script (執行景點腳本)
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-    run: python daily_food.py
+    run: python daily_spot.py
     
-  - name: Push Image to GitHub (推播美食圖片)
+  - name: Push Image to GitHub (推播景點圖片)
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      git add images/food/*.jpg
-      git commit -m "Update Food Images" || echo "No changes"
+      git add images/SPOT/*.jpg
+      git add selected_city.txt 
+      git commit -m "Update Spot Images & City" || echo "No changes"
       git push
 
   - name: Wait for GitHub Pages to Deploy
     run: |
-      # 💡 [關鍵修復] 清除多餘的換行符號，防止網址毀損
+      # 💡 [保險機制] 清除多餘換行，防止網址毀損
       IMG_NAMES=$(cat img_names.txt | tr -d '\r\n')
       FIRST_IMG=$(echo$IMG_NAMES | cut -d',' -f1)
-      IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$FIRST_IMG"
+      IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
       echo "🔍 等待圖片上線：$IMG_URL"
       for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$IMG_URL")
@@ -49,7 +51,7 @@ steps:
       done
       sleep 5
 
-  # =============== THREADS 發布與蓋樓 ===============
+  # STREAMING_CHUNK: 發布至 Threads
   - name: Post to Threads
     continue-on-error: true
     env:
@@ -61,7 +63,7 @@ steps:
       
       echo "1️⃣ [Threads] 建立多圖子項目..."
       for IMG in "${IMGS[@]}"; do
-        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG"
+        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
         RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=IMAGE" --data-urlencode "image_url=$IMG_URL" --data-urlencode "is_carousel_item=true" --data-urlencode "access_token=$TOKEN")
         ITEM_ID=$(echo$RES | jq -r '.id')
         if [ "$ITEM_ID" != "null" ] && [ -n "$ITEM_ID" ]; then
@@ -84,7 +86,7 @@ steps:
       RES_C2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment2.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN")
       curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$(echo $RES_C2 \vert{} jq -r '.id')&access_token=$TOKEN"
 
-  # =============== INSTAGRAM 發布與蓋樓 ===============
+  # STREAMING_CHUNK: 發布至 Instagram
   - name: Post to Instagram
     continue-on-error: true
     env:
@@ -97,7 +99,7 @@ steps:
       
       echo "1️⃣ [IG] 建立輪播圖片子項目..."
       for IMG in "${IMGS[@]}"; do
-        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG"
+        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
         RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$ACCOUNT_ID/media" --data-urlencode "image_url=$IMG_URL" --data-urlencode "is_carousel_item=true" -d "access_token=$TOKEN")
         ITEM_ID=$(echo$RES | jq -r '.id')
         if [ "$ITEM_ID" != "null" ] && [ -n "$ITEM_ID" ]; then
@@ -118,7 +120,7 @@ steps:
       sleep 5
       curl -s -X POST "https://graph.facebook.com/v19.0/$IG_POST_ID/comments" --data-urlencode message@comment2.txt -d "access_token=$TOKEN"
 
-  # =============== FACEBOOK 發布與蓋樓 ===============
+  # STREAMING_CHUNK: 發布至 Facebook (引入最強的 JSON Array 寫法)
   - name: Post to Facebook Page
     continue-on-error: true
     env:
@@ -131,7 +133,7 @@ steps:
       echo "1️⃣ [FB] 上傳未發布的圖片以獲取 media_fbid..."
       FB_MEDIA_IDS=()
       for IMG in "${IMGS[@]}"; do
-        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/food/$IMG"
+        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
         RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$PAGE_ID/photos" --data-urlencode "url=$IMG_URL" -d "published=false" -d "access_token=$TOKEN")
         ID=$(echo$RES | jq -r '.id')
         if [ "$ID" != "null" ] && [ -n "$ID" ]; then
@@ -159,5 +161,5 @@ steps:
       sleep 5
       curl -s -X POST "https://graph.facebook.com/v19.0/$FB_POST_ID/comments" --data-urlencode message@comment2.txt -d "access_token=$TOKEN"
       
-      echo "🎉 全部發布完成！主文多圖 + 美食雙留言蓋樓成功！"
+      echo "🎉 景點 10 圖輪播與三平台發布全部完成！"
 
