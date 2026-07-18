@@ -16,7 +16,7 @@ def run():
             
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # --- A. Gemini 生成 Threads 專屬閒聊風文案與雙留言 ---
+        # --- A. Gemini 生成貼文文案與 10 個景點資料 ---
         print("🤖 系統正在隨機抽取城市與主題...")
         
         target_cities = [
@@ -36,29 +36,33 @@ def run():
             "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
         ]
-        themes = ["歷史古蹟", "文青巷弄", "自然絕景", "網美打卡", "當地人私房秘境", "浪漫夜景"]
+        themes = ["歷史古蹟", "文青巷弄", "自然絕景", "購物商圈", "傳統市場或夜市" ,"網美打卡", "當地人私房秘境", "浪漫夜景"]
         
-        selected_city = random.choice(target_cities)
+        if os.path.exists("city.txt"):
+            with open("city.txt", "r", encoding="utf-8") as f: 
+                selected_city = f.read().strip()
+        else:
+            selected_city = random.choice(target_cities)
+            with open("city.txt", "w", encoding="utf-8") as f:
+                f.write(selected_city)
+                
         selected_theme = random.choice(themes)
-        
         print(f"🎯 本次抽中：【{selected_city}】的【{selected_theme}】，準備交由 Gemini 生成...")
         
-        # 💡 修改重點：強制要求主文 (caption) 必須使用 \n\n 進行舒適的段落排版
         task_prompt = (
-            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇 Threads 貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 3 個符合【{selected_theme}】主題的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
+            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 10 個符合【{selected_theme}】主題的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
-            f"- caption: (主文) 第一人稱發牢騷或表達興奮，用輕鬆口吻推薦這 3 個景點。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『分享給朋友』。這裡『絕對不要』寫出如何抵達或交通方式。480字內。\n"
-            f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。例如：先寫一段開場白，換行後列出三個景點的簡單氛圍，換行後再寫結尾互動語。不要把所有字擠在一起！\n"
-            f"- spots: (這是一個包含 3 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
+            f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業旅遊家，用輕鬆口吻簡單盤點這 10 個景點。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細交通』。這裡『絕對不要』寫出如何抵達或交通方式,也不要用副詞。480字內。\n"
+            f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
+            f"- spots: (這是一個包含 10 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
             f"  - spot_name: (景點名稱) 景點的精準名稱。\n"
-            f"  - image_prompt: (英文咒語) 為了在『專業攝影的高水準』與『真實、無AI感』之間取得完美平衡，請描述該景點的具體畫面。並且『強制』在開頭或結尾加入以下風格關鍵字：'Professional editorial travel photography, full-frame camera quality, shallow depth of field, f/1.4 aperture bokeh, candid professional look, natural light (e.g., soft golden hour, Moody overcast), realistic natural color grading, raw film textures, slight authentic film grain'. 構圖要精細（例如引導線、三分法），但呈現出的光影和質感必須是自然的真實場景，不要有任何後製過度的痕跡。並且『絕對不要』使用 '8k, masterpiece, cinematic lighting, over-processed HDR, hyper-detailed, perfect composition' 等會增加塑膠感的字眼。\n"
+            f"  - image_prompt: (英文咒語) 請根據該景點具體畫面撰寫咒語。為了打破 AI 塗抹感並模擬真實手機攝影，『強制』加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 不要使用任何 master piece, 8k 等字眼。\n"
             f"  - transportation: (交通攻略) 詳細的自由行大眾交通方式，例如搭乘哪條地鐵、哪個出口、步行幾分鐘。越詳細越好。\n"
             f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這個景點的關鍵字。\n\n"
-            f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。並且確保所有輸出內容（除了 image_prompt 外）都必須是全中文。"
+            f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        # 開啟 Gemini 原生的 JSON Mode
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
@@ -75,68 +79,60 @@ def run():
             print(res.text)
             sys.exit(1)
             
-        # 處理文案中的連續換行符號，確保寫入檔案時是真正的換行
         raw_caption = data.get("caption", "無法生成主文")
         caption = raw_caption.replace("\\n", "\n") 
         spots = data.get("spots", [])
         
-        if len(spots) < 3:
-            print("⚠️ 警告：AI 沒有生成足夠的 3 個景點。")
-        
-        # 組合兩則留言的內容 (原本已經有加入 \n 換行)
-        comment1_text = "📍 景點資訊不完整"
-        comment2_text = ""
-        
-        if len(spots) >= 1:
-            comment1_text = "整理好這 3 個地方的交通和搜尋關鍵字給大家啦！快點筆記起來👇\n\n"
-            for i, spot in enumerate(spots):
-                spot_name = spot.get("spot_name", "未知景點")
-                transportation = spot.get("transportation", "未知交通方式")
-                google_maps_keyword = spot.get("google_maps_keyword", "未知關鍵字")
-                
-                comment_part = (
-                    f"✨ {i+1}. {spot_name}\n"
-                    f"🚆 交通：{transportation}\n"
-                    f"🗺️ 搜尋：{google_maps_keyword}\n\n"
-                )
-                
-                # 將內容分配到兩則留言，避免單則太長
-                if i < 2:
-                    comment1_text += comment_part
-                else:
-                    comment2_text += comment_part
-                    
-        comment1_text = comment1_text.strip()
-        comment2_text = comment2_text.strip()
+        if len(spots) < 10:
+            print(f"⚠️ 警告：AI 只有生成 {len(spots)} 個景點 (預期 10 個)。")
 
         if len(caption) > 480: caption = caption[:475] + "..."
-        if len(comment1_text) > 480: comment1_text = comment1_text[:475] + "..."
-        if len(comment2_text) > 480: comment2_text = comment2_text[:475] + "..."
-
-        # --- B. Gemini 生成圖片並儲存 ---
-        img_dir = "images/SPOT"
         
+        with open("caption.txt", "w", encoding="utf-8") as f: 
+            f.write(caption)
+            
+        # 產生多個留言檔案，每個景點獨立一個留言
+        print(f"📝 正在建立 {len(spots)} 則獨立留言檔...")
+        for i, spot in enumerate(spots):
+            spot_name = spot.get("spot_name", "未知景點")
+            transportation = spot.get("transportation", "未知交通方式")
+            google_maps_keyword = spot.get("google_maps_keyword", "未知關鍵字")
+            
+            comment_text = (
+                f"✨ 景點 {i+1}：{spot_name}\n"
+                f"🚆 交通：{transportation}\n"
+                f"🗺️ 搜尋：{google_maps_keyword}"
+            )
+            
+            if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
+            
+            # 寫入 comment1.txt ~ comment10.txt
+            with open(f"comment{i+1}.txt", "w", encoding="utf-8") as f:
+                f.write(comment_text)
+
+        # --- B. Gemini 生成 10 張圖片並儲存 ---
+        img_dir = "images/SPOT"
         if os.path.exists(img_dir) and not os.path.isdir(img_dir):
-            print(f"⚠️ 發現同名檔案，正在清空以建立正確的資料夾...")
             os.remove(img_dir)
         os.makedirs(img_dir, exist_ok=True)
         
         img_names = []
         
-        for i, spot in enumerate(spots[:3]):
+        for i, spot in enumerate(spots):
             image_prompt = spot.get("image_prompt")
+            spot_name = spot.get("spot_name", "未知景點")
             if not image_prompt:
-                print(f"⚠️ 景點 {i+1} 沒有 image_prompt，跳過生成圖片。")
+                print(f"⚠️ {spot_name} 沒有 image_prompt，跳過生圖。")
                 continue
                 
-            print(f"🎨 正在以專業攝影風格繪製第 {i+1} 個景點...")
+            print(f"🎨 [{i+1}/{len(spots)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{spot_name}...")
             try:
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="1:1")
+                        image_config=types.ImageConfig(aspect_ratio="9:16") # 強制要求 9:16
                     )
                 )
                 
@@ -148,32 +144,23 @@ def run():
                         part.as_image().save(local_img_path)
                         img_names.append(img_name)
                         break
-            except Exception as e:
-                print(f"💥 生成第 {i+1} 張圖片時發生錯誤：{e}")
+                        
+                # 避免連續呼叫 10 次觸發 API Rate Limit 限制，暫停 5 秒
+                time.sleep(5)
                 
-        # --- C. 寫入暫存檔 ---
-        # 為了相容 GitHub Actions 檢查腳本，第一張圖的名字寫回 img_name.txt
+            except Exception as e:
+                print(f"💥 生成 {spot_name} 圖片時發生錯誤：{e}")
+                
         if img_names:
             with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
             
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
-        with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
-        with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment1_text)
-        with open("comment2.txt", "w", encoding="utf-8") as f: f.write(comment2_text)
             
-        print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
-
-        # 在終端機印出來預覽
-        print("\n--- 📝 產出預覽 ---")
-        print(f"[主文預覽]:\n{caption}\n")
-        print(f"[留言1預覽]:\n{comment1_text}\n")
-        if comment2_text:
-            print(f"[留言2預覽]:\n{comment2_text}")
+        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / {len(spots)} 個留言檔 / 產出 {len(img_names)} 張圖片")
 
     except Exception as e:
-        print(f"💥 發生錯誤：{e}")
+        print(f"💥 發生嚴重錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
     run()
-
