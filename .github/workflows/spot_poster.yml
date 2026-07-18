@@ -1,19 +1,4 @@
-name: ✈️ 晚間小編 (三平台發佈 + 10留言蓋樓)
-
-on:
-workflow_dispatch:
-schedule:
-- cron: '0 10 * * 1,2,5,6'
-
-jobs:
-build_and_post:
-runs-on: ubuntu-latest
-permissions:
-contents: write
-steps:
-- uses: actions/checkout@v4
-
-  - name: Setup Python
+name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:schedule:# 每週一與週五的 UTC 10:00 執行 (台灣時間 18:00)- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- uses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
@@ -29,24 +14,29 @@ steps:
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_spot.py
     
-  - name: Push Image to GitHub (推播景點圖片)
+  - name: Push Image and City Setup to GitHub (推播圖片及城市設定)
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      if ls images/SPOT/*.jpg 1> /dev/null 2>&1; then
-        git add images/SPOT/*.jpg
-        git commit -m "Update Spot Image"
-        git push
-      else
-        echo "沒有圖片需要上傳"
-      fi
+      # 加入圖片與 city.txt
+      git add images/SPOT/*.jpg city.txt
+      git commit -m "Update Spot Images and City Setup" || echo "No changes to commit"
+      git push
 
-  - name: Wait for GitHub Pages to Deploy (等待景點圖片上線)
+  - name: Wait for GitHub Pages to Deploy
     run: |
       IMG_NAMES=$(cat img_names.txt)
-      FIRST_IMG=$(echo$IMG_NAMES | cut -d',' -f1)
+      # Bash 安全字串切割，避免空值報錯
+      IFS=',' read -ra IMGS <<< "$IMG_NAMES"
+      FIRST_IMG="${IMGS[0]}"
+      
+      if [ -z "$FIRST_IMG" ]; then
+        echo "❌ 找不到圖片名稱，中斷執行。"
+        exit 1
+      fi
+
       IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
-      echo "🔍 正在等待圖片上線：$IMG_URL"
+      echo "🔍 正在等待第一張圖片上線：$IMG_URL"
       
       for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$IMG_URL")
@@ -59,7 +49,7 @@ steps:
       done
       sleep 5
 
-  - name: Post Main and Reply (發布 Threads 多圖與最多10則留言)
+  - name: Post Main and Reply (發布 Threads 8圖輪播與留言)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
@@ -69,21 +59,30 @@ steps:
       
       echo "📤 正在建立多圖子項目..."
       for IMG in "${IMGS[@]}"; do
-        IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
-        RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
-          --data-urlencode "media_type=IMAGE" \
-          --data-urlencode "image_url=$IMG_URL" \
-          --data-urlencode "is_carousel_item=true" \
-          --data-urlencode "access_token=$TOKEN")
-          
-        ITEM_ID=$(echo$RES_ITEM | jq -r '.id')
-        if [ -z "$CHILDREN_IDS" ]; then
-          CHILDREN_IDS="$ITEM_ID"
-        else
-          CHILDREN_IDS="$CHILDREN_IDS,$ITEM_ID"
+        if [ -n "$IMG" ]; then
+          IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
+          RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            --data-urlencode "media_type=IMAGE" \
+            --data-urlencode "image_url=$IMG_URL" \
+            --data-urlencode "is_carousel_item=true" \
+            --data-urlencode "access_token=$TOKEN")
+            
+          ITEM_ID=$(echo$RES_ITEM | jq -r '.id // empty')
+          if [ -n "$ITEM_ID" ]; then
+            if [ -z "$CHILDREN_IDS" ]; then
+              CHILDREN_IDS="$ITEM_ID"
+            else
+              CHILDREN_IDS="$CHILDREN_IDS,$ITEM_ID"
+            fi
+          fi
+          sleep 3
         fi
-        sleep 3
       done
+
+      if [ -z "$CHILDREN_IDS" ]; then
+         echo "❌ 建立圖片容器失敗！"
+         exit 1
+      fi
 
       sleep 5
       echo "📤 正在發布主文..."
@@ -92,15 +91,20 @@ steps:
         --data-urlencode "children=$CHILDREN_IDS" \
         --data-urlencode text@caption.txt \
         --data-urlencode "access_token=$TOKEN")
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
+      MAIN_ID=$(echo$RES_MAIN | jq -r '.id // empty')
       
+      if [ -z "$MAIN_ID" ]; then
+         echo "❌ 主文容器建立失敗！$RES_MAIN"
+         exit 1
+      fi
+
       sleep 15
       PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
-      POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
+      POST_ID=$(echo$PUBLISH_RES | jq -r '.id // empty')
       echo "✅ 主文發布成功，ID: $POST_ID"
       
-      echo "💬 開始發布最多 10 則留言..."
-      for i in {1..10}; do
+      echo "💬 開始發布留言..."
+      for i in {1..8}; do
         if [ "$i" -eq 1 ]; then COMMENT_FILE="comment.txt"; else COMMENT_FILE="comment${i}.txt"; fi
 
         if [ -f "$COMMENT_FILE" ]; then
@@ -110,14 +114,16 @@ steps:
             --data-urlencode text@$COMMENT_FILE \
             --data-urlencode "reply_to_id=$POST_ID" \
             --data-urlencode "access_token=$TOKEN")
-          COMMENT_ID=$(echo$RES_COMMENT | jq -r '.id')
+          COMMENT_ID=$(echo$RES_COMMENT | jq -r '.id // empty')
           
-          sleep 5
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
-          echo "✅ 第 $i 則留言發布成功"
+          if [ -n "$COMMENT_ID" ]; then
+            sleep 5
+            curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+            echo "✅ 第 $i 則留言發布成功"
+          fi
         else
-          echo "ℹ️ 找不到 $COMMENT_FILE，結束留言。"
           break
         fi
       done
       echo "🎉 全部發布完成！"
+
