@@ -1,8 +1,8 @@
-name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'💡 新增排隊機制：確保所有發文腳本一次只能執行一個，避免 Git 衝突或 Pages 取消concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:run:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
+name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
-      
+
   - name: Install dependencies
     run: pip install google-genai requests pillow
 
@@ -17,18 +17,14 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
       git add .
       git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
-      # 加上 pull 確保不會因為遠端有新版本而 push 失敗
       git pull --rebase origin main || true
       git push
 
   - name: Wait for GitHub Pages to Deploy
     run: |
-      # 取得圖片網址前綴
       OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
       REPO=$(basename "${{ github.repository }}")
       BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-      
-      # 讀取第一張圖片的檔名來測試連線
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
       FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
@@ -43,7 +39,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
         echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
         sleep 15
       done
-      sleep 10 # 多等一下確保快取更新
+      sleep 10
 
   - name: Post to Threads (Carousel + 10 Comments)
     env:
@@ -54,9 +50,8 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
       BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      
-      # 1. 建立輪播圖的子項目 (Item Containers)
       CHILDREN=""
+      
       echo "📤 [Threads] 正在上傳 10 張圖片至暫存區..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
@@ -66,24 +61,19 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
           CHILDREN="${CHILDREN}${ID},"
         fi
       done
-      CHILDREN=${CHILDREN%,} # 移除最後的逗號
+      CHILDREN=${CHILDREN%,}
       
       sleep 15
-      
-      # 2. 建立主輪播圖容器 (Carousel Container)
       echo "📤 [Threads] 正在建立輪播主文..."
       RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       
       sleep 15
-      
-      # 3. 發布主貼文
       echo "📤 [Threads] 正在正式發布貼文..."
       PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
       POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
       echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
       
-      # 4. 蓋樓 10 則留言
       echo "📤 [Threads] 準備依序發布 10 則交通資訊留言..."
       for i in {1..10}; do
         if [ -f "comment${i}.txt" ]; then
@@ -91,7 +81,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
           COMMENT_ID=$(cat temp_res.json | jq -r '.id')
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN" > /dev/null
           echo "✅ [Threads] 留言 $i 發布成功"
-          sleep 5 # 避免被視為洗版
+          sleep 5
         fi
       done
 
@@ -105,8 +95,8 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
       BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      
       CHILDREN=""
+      
       echo "📤 [IG] 正在上傳圖片至暫存區..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
@@ -118,15 +108,12 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
       done
       CHILDREN=${CHILDREN%,}
       
-      sleep 20 # IG 伺服器處理圖片通常需要較久的時間
-      
+      sleep 20
       echo "📤 [IG] 正在建立輪播主文..."
-      # IG 的主文參數名稱是 caption
       RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       
       sleep 15
-      
       echo "📤 [IG] 正在正式發布貼文..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
       echo "✅ [IG] 輪播圖發布指令已送出！"
@@ -141,21 +128,20 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'�
       BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      
       ATTACHED_MEDIA="["
+      
       echo "📤 [FB] 正在上傳未公開的照片..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
-        # 上傳為 unpublished 狀態以附著在貼文中
         RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$META_TOKEN")
         PHOTO_ID=$(echo$RES | jq -r '.id')
         if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
           ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
         fi
       done
-      ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]" # 移除最後的逗號並補上括號
+      ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
       
       echo "📤 [FB] 正在發布多圖貼文..."
-      # FB 的主文參數名稱是 message
       curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
       echo "✅ [FB] 發布指令已送出！"
+
