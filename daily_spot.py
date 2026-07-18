@@ -49,7 +49,8 @@ def post_to_fb_and_ig(text, image_paths):
             if ig_id:
                 time.sleep(3) 
                 ig_media_containers = []
-                for m_id in fb_media_ids[:10]:
+                # IG 最多支援 10 張，這裡取前 8 張
+                for m_id in fb_media_ids[:8]:
                     photo_url_req = f"https://graph.facebook.com/v19.0/{m_id}?fields=images&access_token={fb_token}"
                     photo_data = requests.get(photo_url_req).json()
                     source_url = photo_data.get("images", [{}])[0].get("source")
@@ -115,6 +116,7 @@ def run():
             "多倫多", "溫哥華", "墨西哥城", "坎昆", "里約熱內盧", "聖保羅", 
             "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
+
         ]
         themes = ["歷史古蹟", "文青巷弄", "自然絕景", "網美打卡", "當地人私房秘境", "浪漫夜景", "特色建築", "藝術展區"]
         selected_city = random.choice(target_cities)
@@ -163,7 +165,6 @@ def run():
         img_dir = "images/SPOT"
         if os.path.exists(img_dir) and not os.path.isdir(img_dir): os.remove(img_dir)
         os.makedirs(img_dir, exist_ok=True)
-        # 清除舊照片
         for f in os.listdir(img_dir):
             os.remove(os.path.join(img_dir, f))
             
@@ -198,7 +199,6 @@ def run():
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         
-        # 清除舊的 comment*.txt
         for file in os.listdir("."):
             if file.startswith("comment") and file.endswith(".txt"): os.remove(file)
             
