@@ -10,8 +10,7 @@ from google.genai import types
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def post_to_fb_and_ig(text, image_paths):
-    if not image_paths:
-        return
+    if not image_paths: return
 
     fb_token = os.getenv("FB_PAGE_ACCESS_TOKEN")
     page_id = os.getenv("FB_PAGE_ID")
@@ -80,7 +79,7 @@ def run():
             with open("city.txt", "r", encoding="utf-8") as f:
                 selected_city = f.read().strip()
                 
-        print(f"🎯 啟動連動機制！將針對昨天抽中的城市：【{selected_city}】生成 8 間美食！")
+        print(f"🎯 啟動連動機制！將針對前次抽中的城市：【{selected_city}】生成 8 間美食！")
         
         themes = ["在地人推薦街頭小吃", "必吃百年老店", "視覺系網美甜點", "深夜排隊宵夜", "隱藏版巷弄美食", "高CP值平價美食", "傳統市場必吃", "在地特色咖啡廳"]
         themes_str = "、".join(themes)
@@ -120,6 +119,10 @@ def run():
 
         img_dir = "images/food"
         os.makedirs(img_dir, exist_ok=True)
+        # 清除舊照片
+        for f in os.listdir(img_dir):
+            os.remove(os.path.join(img_dir, f))
+            
         img_names, local_img_paths = [], []
         
         for i, r in enumerate(restaurants[:8]):
@@ -129,7 +132,7 @@ def run():
                     model='gemini-2.5-flash-image', contents=r.get("image_prompt"),
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"], 
-                        image_config=types.ImageConfig(aspect_ratio="9:16")
+                        image_config=types.ImageConfig(aspect_ratio="9:16") # 強制直式 9:16
                     )
                 )
                 img_name = f"food_{int(time.time())}_{i}.jpg"
@@ -146,6 +149,11 @@ def run():
                 
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption[:480])
+        
+        # 清除舊的 comment*.txt
+        for file in os.listdir("."):
+            if file.startswith("comment") and file.endswith(".txt"): os.remove(file)
+            
         for i, text in enumerate(comment_texts):
             with open("comment.txt" if i == 0 else f"comment{i+1}.txt", "w", encoding="utf-8") as f: f.write(text)
             
