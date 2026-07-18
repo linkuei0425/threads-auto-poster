@@ -7,6 +7,7 @@ import requests
 from google import genai
 from google.genai import types
 
+# 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def post_to_fb_and_ig(text, image_paths):
@@ -28,6 +29,7 @@ def post_to_fb_and_ig(text, image_paths):
         print(f"📘 準備上傳圖片至 Facebook Page (ID: {page_id})")
         fb_media_ids = []
         
+        # 上傳所有圖片到 FB 獲取 ID
         for img_path in image_paths:
             with open(img_path, "rb") as img:
                 upload_url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
@@ -40,6 +42,7 @@ def post_to_fb_and_ig(text, image_paths):
                 else:
                     print(f"⚠️ FB 圖片上傳失敗: {up_res}")
 
+        # 如果有圖片，則發佈 FB 貼文
         if fb_media_ids:
             post_url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
             post_payload = {"message": text, "access_token": fb_token}
@@ -52,12 +55,14 @@ def post_to_fb_and_ig(text, image_paths):
             else:
                 print(f"⚠️ Facebook 發布失敗: {fb_post_res}")
 
+            # 接著處理 IG 發佈
             if ig_id:
                 print(f"📸 準備發布至 Instagram (ID: {ig_id})")
                 time.sleep(3) # 等待 FB 處理圖片
                 
                 ig_media_containers = []
                 for m_id in fb_media_ids[:10]: # IG Carousel 最多 10 張
+                    # 先從 FB 取得圖片真實網址
                     photo_url_req = f"https://graph.facebook.com/v19.0/{m_id}?fields=images&access_token={fb_token}"
                     photo_data = requests.get(photo_url_req).json()
                     source_url = photo_data.get("images", [{}])[0].get("source")
@@ -69,7 +74,9 @@ def post_to_fb_and_ig(text, image_paths):
                             "is_carousel_item": "true" if len(fb_media_ids) > 1 else "false",
                             "access_token": fb_token
                         }
-                        if len(fb_media_ids) == 1: cont_payload["caption"] = text
+                        # 若只有單圖，需在 container 帶上內文
+                        if len(fb_media_ids) == 1: 
+                            cont_payload["caption"] = text
                         
                         cont_res = requests.post(cont_url, data=cont_payload).json()
                         if "id" in cont_res:
@@ -81,6 +88,7 @@ def post_to_fb_and_ig(text, image_paths):
 
                 if ig_media_containers:
                     if len(ig_media_containers) > 1:
+                        # 多圖情況：建立 Carousel 容器
                         car_url = f"https://graph.facebook.com/v19.0/{ig_id}/media"
                         car_payload = {
                             "media_type": "CAROUSEL",
@@ -93,8 +101,10 @@ def post_to_fb_and_ig(text, image_paths):
                         if not creation_id:
                             print(f"⚠️ 建立 IG Carousel 容器失敗: {car_res}")
                     else:
+                        # 單圖情況
                         creation_id = ig_media_containers[0]
 
+                    # 實際發布至 IG
                     if creation_id:
                         pub_url = f"https://graph.facebook.com/v19.0/{ig_id}/media_publish"
                         pub_payload = {"creation_id": creation_id, "access_token": fb_token}
@@ -118,57 +128,51 @@ def run():
             
         client = genai.Client(api_key=GEMINI_KEY)
         
-        print("🤖 系統正在準備生成美食主題...")
+        print("🤖 系統正在準備啟動...")
         
-        target_cities = [
-            "曼谷", "清邁", "釜山", "首爾", "新加坡", "沖繩", "宮古島", "福岡", 
-            "大阪", "京都", "神戶", "東京", "宇治", "奈良", "香港", "澳門", 
-            "河內", "胡志明市", "峴港", "蘇梅島", "普吉島", "芭達雅", "富國島",
-            "吉隆坡", "濟州島", "札幌", "峇里島", "雅加達", "馬尼拉", "宿霧", 
-            "檳城", "北京", "上海", "廣州", "深圳", "成都", "新德里", "孟買",
-            "巴黎", "倫敦", "羅馬", "馬德里", "巴塞隆納", "阿姆斯特丹", "柏林", 
-            "米蘭", "維也納", "慕尼黑", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
-            "雅典", "蘇黎世", "日內瓦", "哥本哈根", "斯德哥爾摩", "奧斯陸", "赫爾辛基", 
-            "里斯本", "波多", "都柏林", "愛丁堡", "布魯塞爾", "法蘭克福", "華沙", 
-            "克拉科夫", "尼斯", "里昂", "塞維亞", "瓦倫西亞", "拿坡里", "杜布羅夫尼克", 
-            "斯普利特", "薩爾茨堡", "雷克雅維克", "伊斯坦堡", "安塔利亞", "紐約", 
-            "洛杉磯", "舊金山", "芝加哥", "拉斯維加斯", "邁阿密", "奧蘭多", "華盛頓特區", 
-            "多倫多", "溫哥華", "墨西哥城", "坎昆", "里約熱內盧", "聖保羅", 
-            "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
-            "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
-        ]
+        # 讀取景點腳本留下的城市紀錄 (連動功能)
+        selected_city = None
+        if os.path.exists("selected_city.txt"):
+            try:
+                with open("selected_city.txt", "r", encoding="utf-8") as f:
+                    selected_city = f.read().strip()
+                print(f"📂 成功讀取昨日景點城市紀錄：{selected_city}")
+            except Exception as e:
+                print(f"⚠️ 讀取 selected_city.txt 發生錯誤: {e}")
+                
+        # 防呆機制：若無紀錄則隨機抽一個
+        if not selected_city:
+            target_cities = [
+                "曼谷", "清邁", "釜山", "首爾", "新加坡", "沖繩", "宮古島", "福岡", 
+                "大阪", "京都", "神戶", "東京", "宇治", "奈良", "香港", "澳門", 
+                "河內", "胡志明市", "峴港", "蘇梅島", "普吉島", "芭達雅", "富國島"
+            ]
+            selected_city = random.choice(target_cities)
+            print(f"⚠️ 找不到城市紀錄，改為隨機抽取：{selected_city}")
+            
+        print(f"🎯 本次連動城市為：【{selected_city}】，準備交由 Gemini 生成 8 間主題美食...")
         
+        # 擴充為 8 個主題 (對應 8 餐廳與 8 圖片)
         themes = [
             "在地人推薦街頭小吃", "必吃百年老店", "視覺系網美甜點", "深夜排隊宵夜", 
-            "隱藏版巷弄美食", "高CP值平價美食", "傳統道地家常菜", "超人氣排隊名店"
+            "隱藏版巷弄美食", "高CP值平價美食", "人氣網美早午餐", "傳統市場必吃"
         ]
-        
-        if os.path.exists("selected_city.txt"):
-            with open("selected_city.txt", "r", encoding="utf-8") as f:
-                selected_city = f.read().strip()
-            print(f"📥 城市連動成功！接續昨日景點，本日為您介紹：【{selected_city}】的美食")
-        else:
-            selected_city = random.choice(target_cities)
-            print(f"🎲 未找到昨日紀錄，隨機抽取城市：【{selected_city}】")
-            
         themes_str = "、".join(themes)
-        
-        print(f"🎯 準備交由 Gemini 生成 8 間不同主題的餐廳...")
         
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇 Threads 貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 8 間真實存在、有名的特色美食或餐廳。\n"
-            f"這 8 間餐廳必須『分別對應』以下 8 個不同的主題（每個主題挑選一間）：{themes_str}。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 8 間真實存在特色美食或餐廳。\n"
+            f"這 8 間餐廳必須『分別對應』以下 8 個不同的主題（每個主題挑選一間餐廳）：{themes_str}。\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
-            f"- caption: (主文) 第一人稱發牢騷或表達興奮，用輕鬆口吻推薦這 8 間必吃餐廳。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『分享給朋友』。這裡『絕對不要』寫出地址或詳細店名。480字內。\n"
+            f"- caption: (主文) 第一人稱發牢騷或表達興奮，用輕鬆口吻推薦這 8 間美食。結尾拋出引發討論的問題，並呼籲『收藏這篇』。這裡『絕對不要』寫出地址。480字內。\n"
             f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
-            f"- restaurants: (這是一個包含 8 個物件的陣列 Array，每個物件代表一間餐廳，需包含以下屬性)\n"
+            f"- foods: (這是一個包含 8 個物件的陣列 Array，每個物件代表一間餐廳，需包含以下屬性)\n"
             f"  - store_name: (店名) 餐廳的精準名稱。\n"
-            f"  - theme: (所屬主題) 標明這家店是對應哪一個主題（例如填入：深夜排隊宵夜）。\n"
-            f"  - must_order: (必點菜色) 推薦的一道必點菜色。\n"
-            f"  - image_prompt: (英文咒語) 請撰寫一個具體且專業的英文美食攝影咒語。為了確保真實無AI感，『強制』加入以下風格關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, similar lighting to image_1.png, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 背景需呈現簡單、自然的餐桌或餐廳環境，並自然模糊。嚴禁使用：AI, CGI, render, perfect, flawless, 8k, highly detailed, over-processed HDR。\n"
+            f"  - food_theme: (所屬主題) 標明這間餐廳是對應哪一個主題。\n"
+            f"  - image_prompt: (英文咒語) 為了產生適合手機觀看的真實照片，請使用：'Vertical (9:16) aspect ratio, Phone portrait mode. Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight, true-to-life colors, realistic and imperfect textures, no over-saturation, no HDR look. Describe the specific food and rustic table setting clearly. DO NOT use words like 8k, masterpiece, over-processed.'\n"
             f"  - address: (詳細地址) 餐廳的真實詳細地址。\n"
-            f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這家店的關鍵字。\n\n"
+            f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這家店的關鍵字。\n"
+            f"  - comment_text: (簡介) 簡單帶出店名和必點菜色的介紹，約30字。\n\n"
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。並且確保所有輸出內容（除了 image_prompt 外）都必須是全中文。"
         )
         
@@ -177,7 +181,7 @@ def run():
             contents=task_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                temperature=0.8
+                temperature=0.8 
             )
         )
         
@@ -190,35 +194,27 @@ def run():
             
         raw_caption = data.get("caption", "無法生成主文")
         caption = raw_caption.replace("\\n", "\n") 
-        restaurants = data.get("restaurants", [])
+        foods = data.get("foods", [])
         
-        if len(restaurants) < 8:
-            print(f"⚠️ 警告：AI 僅生成了 {len(restaurants)} 間餐廳。")
+        if len(foods) < 8:
+            print(f"⚠️ 警告：AI 僅生成了 {len(foods)} 間美食。")
             
         if len(caption) > 480: caption = caption[:475] + "..."
         
+        # 動態產生最多 8 則留言，每則留言放一間餐廳
         comment_texts = []
-        for i, r in enumerate(restaurants):
-            store_name = r.get("store_name", "未知店名")
-            theme = r.get("theme", "推薦美食")
-            must_order = r.get("must_order", "未知")
-            address = r.get("address", "未知地址")
-            google_maps_keyword = r.get("google_maps_keyword", "未知關鍵字")
-            
-            c_text = ""
-            if i == 0:
-                c_text = f"整理好這 {len(restaurants)} 間必吃美食的地址和搜尋關鍵字啦！吃貨們快點筆記起來👇\n\n"
-            
-            c_text += (
-                f"✨ {i+1}. [{theme}] {store_name}\n"
-                f"🍽️ 必點：{must_order}\n"
-                f"📍 地址：{address}\n"
-                f"🗺️ 搜尋：{google_maps_keyword}"
+        for i, food in enumerate(foods):
+            c_text = (
+                f"✨ {i+1}. [{food.get('food_theme')}] {food.get('store_name')}\n"
+                f"🍽️ 推薦：{food.get('comment_text')}\n"
+                f"📍 地址：{food.get('address')}\n"
+                f"🗺️ 搜尋：{food.get('google_maps_keyword')}"
             )
             
             if len(c_text) > 480: c_text = c_text[:475] + "..."
             comment_texts.append(c_text)
 
+        # 將主文與所有資訊留言合併，專門給沒有字數限制的 FB / IG 使用
         fb_ig_caption = caption + "\n\n" + "\n\n".join(comment_texts)
 
         img_dir = "images/food"
@@ -230,19 +226,19 @@ def run():
         img_names = []
         local_img_paths = []
         
-        for i, r in enumerate(restaurants[:8]):
-            image_prompt = r.get("image_prompt")
+        for i, food in enumerate(foods[:8]):
+            image_prompt = food.get("image_prompt")
             if not image_prompt:
                 continue
                 
-            print(f"🎨 正在以真實手機攝影風格繪製第 {i+1} 間餐廳 ({r.get('theme', '未知主題')})...")
+            print(f"🎨 正在以真實手機攝影風格繪製第 {i+1} 個美食 ({food.get('food_theme', '未知主題')})...")
             try:
+                # 採用 9:16 直式比例
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
-                        # 💡 確保美食圖片也是直立的 9:16
                         image_config=types.ImageConfig(aspect_ratio="9:16")
                     )
                 )
@@ -256,23 +252,25 @@ def run():
                         img_names.append(img_name)
                         local_img_paths.append(local_img_path)
                         break
-                time.sleep(1.5) # 避免 Rate Limit
+                time.sleep(1.5)
             except Exception as e:
                 print(f"💥 生成第 {i+1} 張圖片時發生錯誤：{e}")
                 
         if img_names:
-            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
+            with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
+            with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
             
-        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
-        with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
-        
-        for i, text in enumerate(comment_texts):
-            file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
-            with open(file_name, "w", encoding="utf-8") as f: f.write(text)
+            # 寫入多達 8 則的留言檔
+            for i, text in enumerate(comment_texts):
+                file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
+                with open(file_name, "w", encoding="utf-8") as f: f.write(text)
+                
+            print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
             
-        print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
-
-        post_to_fb_and_ig(fb_ig_caption, local_img_paths)
+            # 觸發發文到 FB 與 IG
+            post_to_fb_and_ig(fb_ig_caption, local_img_paths)
+        else:
+            print("⚠️ 未能生成任何圖片，程式結束。")
 
     except Exception as e:
         print(f"💥 發生錯誤：{e}")
