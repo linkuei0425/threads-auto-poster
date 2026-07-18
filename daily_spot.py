@@ -7,7 +7,6 @@ import requests
 from google import genai
 from google.genai import types
 
-# 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def post_to_fb_and_ig(text, image_paths):
@@ -29,7 +28,6 @@ def post_to_fb_and_ig(text, image_paths):
         print(f"📘 準備上傳圖片至 Facebook Page (ID: {page_id})")
         fb_media_ids = []
         
-        # 上傳所有圖片到 FB 獲取 ID
         for img_path in image_paths:
             with open(img_path, "rb") as img:
                 upload_url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
@@ -42,7 +40,6 @@ def post_to_fb_and_ig(text, image_paths):
                 else:
                     print(f"⚠️ FB 圖片上傳失敗: {up_res}")
 
-        # 如果有圖片，則發佈 FB 貼文
         if fb_media_ids:
             post_url = f"https://graph.facebook.com/v19.0/{page_id}/feed"
             post_payload = {"message": text, "access_token": fb_token}
@@ -55,7 +52,6 @@ def post_to_fb_and_ig(text, image_paths):
             else:
                 print(f"⚠️ Facebook 發布失敗: {fb_post_res}")
 
-            # 接著處理 IG 發佈
             if ig_id:
                 print(f"📸 準備發布至 Instagram (ID: {ig_id})")
                 time.sleep(3) # 等待 FB 處理圖片
@@ -74,9 +70,7 @@ def post_to_fb_and_ig(text, image_paths):
                             "is_carousel_item": "true" if len(fb_media_ids) > 1 else "false",
                             "access_token": fb_token
                         }
-                        # 若只有單圖，需在 container 帶上內文
-                        if len(fb_media_ids) == 1: 
-                            cont_payload["caption"] = text
+                        if len(fb_media_ids) == 1: cont_payload["caption"] = text
                         
                         cont_res = requests.post(cont_url, data=cont_payload).json()
                         if "id" in cont_res:
@@ -88,7 +82,6 @@ def post_to_fb_and_ig(text, image_paths):
 
                 if ig_media_containers:
                     if len(ig_media_containers) > 1:
-                        # 多圖情況：建立 Carousel 容器
                         car_url = f"https://graph.facebook.com/v19.0/{ig_id}/media"
                         car_payload = {
                             "media_type": "CAROUSEL",
@@ -101,10 +94,9 @@ def post_to_fb_and_ig(text, image_paths):
                         if not creation_id:
                             print(f"⚠️ 建立 IG Carousel 容器失敗: {car_res}")
                     else:
-                        # 單圖情況
                         creation_id = ig_media_containers[0]
 
-                    # 實際發布至 IG
+                    # 實際發布
                     if creation_id:
                         pub_url = f"https://graph.facebook.com/v19.0/{ig_id}/media_publish"
                         pub_payload = {"creation_id": creation_id, "access_token": fb_token}
@@ -121,12 +113,15 @@ def post_to_fb_and_ig(text, image_paths):
     except Exception as e:
         print(f"💥 FB/IG 發布錯誤：{e}")
 
+
 def run():
     try:
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
         client = genai.Client(api_key=GEMINI_KEY)
+        
+        print("🤖 系統正在隨機抽取城市與主題...")
         
         target_cities = [
             "曼谷", "清邁", "釜山", "首爾", "新加坡", "沖繩", "宮古島", "福岡", 
@@ -154,11 +149,11 @@ def run():
         selected_city = random.choice(target_cities)
         themes_str = "、".join(themes)
         
-        # 紀錄抽中的城市，供隔天的美食腳本讀取
+        # 💡 將抽中的城市寫入檔案，供隔天的美食腳本連動讀取
         with open("selected_city.txt", "w", encoding="utf-8") as f:
             f.write(selected_city)
             
-        print(f"🎯 本次抽中：【{selected_city}】，並已儲存至紀錄檔，準備交由 Gemini 生成涵蓋 10 大主題的景點...")
+        print(f"🎯 本次抽中：【{selected_city}】，已經儲存紀錄。準備交由 Gemini 生成涵蓋 10 大主題的景點...")
         
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇 Threads 貼文。\n"
@@ -170,7 +165,7 @@ def run():
             f"- spots: (這是一個包含 10 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
             f"  - spot_name: (景點名稱) 景點的精準名稱。\n"
             f"  - spot_theme: (所屬主題) 標明這個景點是對應哪一個主題（例如填入：市集或市場或夜市）。\n"
-            f"  - image_prompt: (英文咒語) 為了產生適合手機觀看的真實照片，請使用：'Vertical (9:16) aspect ratio, Phone portrait mode. Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight, true-to-life colors, realistic and imperfect, no over-saturation, no HDR look. Describe the scene specifically. DO NOT use words like 8k, masterpiece, over-processed.'\n"
+            f"  - image_prompt: (英文咒語) 為了產生真實的手機攝影感，請使用以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode. Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight, true-to-life colors, realistic and imperfect, no over-saturation, no HDR look. Describe the scene specifically. DO NOT use words like 8k, masterpiece, over-processed.'\n"
             f"  - transportation: (交通攻略) 詳細的自由行大眾交通方式，例如搭乘哪條地鐵、哪個出口、步行幾分鐘。越詳細越好。\n"
             f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這個景點的關鍵字。\n\n"
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。並且確保所有輸出內容（除了 image_prompt 外）都必須是全中文。"
@@ -227,21 +222,18 @@ def run():
 
         img_dir = "images/SPOT"
         
-        if os.path.exists(img_dir) and not os.path.isdir(img_dir):
-            os.remove(img_dir)
         os.makedirs(img_dir, exist_ok=True)
         
         img_names = []
-        local_img_paths = [] 
+        local_img_paths = [] # 追蹤本地圖片路徑供 FB/IG 函數上傳用
         
         for i, spot in enumerate(spots[:10]):
             image_prompt = spot.get("image_prompt")
             if not image_prompt:
                 continue
                 
-            print(f"🎨 正在以真實手機攝影風格繪製第 {i+1} 個景點 ({spot.get('spot_theme', '未知主題')})...")
+            print(f"🎨 正在繪製第 {i+1} 個景點 9:16 真實直式圖片...")
             try:
-                # 採用 9:16 直式比例
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
@@ -260,25 +252,26 @@ def run():
                         img_names.append(img_name)
                         local_img_paths.append(local_img_path)
                         break
-                time.sleep(1.5) 
+                time.sleep(1.5) # 避免 Rate Limit
             except Exception as e:
                 print(f"💥 生成第 {i+1} 張圖片時發生錯誤：{e}")
                 
         if img_names:
-            with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
-            with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
+            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
             
-            # 寫入多達 10 則的留言檔
-            for i, text in enumerate(comment_texts):
-                file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
-                with open(file_name, "w", encoding="utf-8") as f: f.write(text)
-                
-            print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
+        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
+        with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
+        
+        # 寫入多達 10 則的留言檔 (保留原本 comment.txt 及 comment2.txt 的命名規律)
+        for i, text in enumerate(comment_texts):
+            file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
+            with open(file_name, "w", encoding="utf-8") as f: f.write(text)
             
-            # 觸發發文到 FB 與 IG
-            post_to_fb_and_ig(fb_ig_caption, local_img_paths)
-        else:
-            print("⚠️ 未能生成任何圖片，程式結束。")
+        print(f"👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
+
+        # 觸發發文到 FB 與 IG
+        post_to_fb_and_ig(fb_ig_caption, local_img_paths)
+        print("✅ 景點任務全數執行完畢！")
 
     except Exception as e:
         print(f"💥 發生錯誤：{e}")
