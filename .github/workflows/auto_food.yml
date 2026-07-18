@@ -159,5 +159,5 @@ steps:
       sleep 5
       curl -s -X POST "https://graph.facebook.com/v19.0/$FB_POST_ID/comments" --data-urlencode message@comment2.txt -d "access_token=$TOKEN"
       
-      # 加入成功提示，讓 Log 更好看！
       echo "🎉 全部發布完成！主文多圖 + 美食雙留言蓋樓成功！"
+
