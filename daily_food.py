@@ -38,7 +38,7 @@ def run():
         
         # --- B. Gemini 生成文案 (8家餐廳) ---
         task_prompt = (
-            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇 Threads/IG/FB 貼文。\n"
+            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇社群貼文。\n"
             f"1. 請針對【{selected_city}】這個城市，挑選 8 家符合【{selected_theme}】主題的真實存在美食或餐廳。\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
             f"- caption: (主文) 第一人稱發牢騷或表達興奮，用輕鬆口吻推薦這 8 家餐廳。結尾拋出引發討論的問題，並呼籲『收藏這篇』。絕對不要在主文寫出地址。300字內。段落間請用 '\\n\\n' 換行。\n"
@@ -60,12 +60,7 @@ def run():
             )
         )
         
-        try:
-            data = json.loads(res.text)
-        except json.JSONDecodeError:
-            print("⚠️ 警告：AI 輸出的不是有效的 JSON！")
-            sys.exit(1)
-            
+        data = json.loads(res.text)
         raw_caption = data.get("caption", "無法生成主文")
         caption = raw_caption.replace("\\n", "\n") 
         restaurants = data.get("restaurants", [])
@@ -116,7 +111,6 @@ def run():
             
             print(f"🎨 正在繪製第 {i+1} 家餐廳美食 ({r.get('name')})...")
             try:
-                # 使用 9:16 aspect_ratio
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=full_prompt,
@@ -137,6 +131,9 @@ def run():
             except Exception as e:
                 print(f"💥 生成第 {i+1} 張圖片發生錯誤：{e}")
                 
+            # 💡 [關鍵修復] 增加緩衝時間，避免連續產 8 張圖被 API 判定為頻繁請求而阻擋
+            time.sleep(8)
+                
         # --- D. 寫入暫存檔 ---
         if img_names:
             with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
@@ -146,12 +143,7 @@ def run():
         with open("comment.txt", "w", encoding="utf-8") as f: f.write(comment1_text)
         with open("comment2.txt", "w", encoding="utf-8") as f: f.write(comment2_text)
             
-        print(f"👉 檔案寫入完成：產出 {len(img_names)} 張真實直立照片。")
-        print("\n--- 📝 產出預覽 ---")
-        print(f"[主文預覽]:\n{caption}\n")
-        print(f"[留言1預覽]:\n{comment1_text}\n")
-        print(f"[留言2預覽]:\n{comment2_text}")
-
+        print(f"👉 檔案寫入完成：成功產出 {len(img_names)} 張真實直立照片。")
     except Exception as e:
         print(f"💥 發生錯誤：{e}")
         sys.exit(1)
