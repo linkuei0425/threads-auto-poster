@@ -1,34 +1,17 @@
-name: ✈️ 晚間小編 (Gemini 2.5 景點連動 - FB/IG/Threads 三平台多圖版)
-
-on:
-workflow_dispatch:
-schedule:
-# 💡 每週一、五執行 (對應美食的二、六) UTC 10:00 (台灣時間 18:00)
-- cron: '0 10 * * 1,5'
-
-jobs:
-build_and_post:
-runs-on: ubuntu-latest
-permissions:
-contents: write
-steps:
-- uses: actions/checkout@v4
-
-  - name: Setup Python
+name: "美食 (FB/IG/Threads Multi-Platform)"on:workflow_dispatch:schedule:- cron: "0 10 * * 1,5"jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Codeuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
-      python-version: '3.10'
+      python-version: "3.10"
       
   - name: Install Dependencies
     run: pip install google-genai requests
     
-  # STREAMING_CHUNK: 執行 Python 腳本與推播圖片
-  - name: Run AI script (執行景點腳本)
+  - name: Run AI script
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     run: python daily_spot.py
     
-  - name: Push Image to GitHub (推播景點圖片)
+  - name: Push Image to GitHub
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -39,19 +22,16 @@ steps:
 
   - name: Wait for GitHub Pages to Deploy
     run: |
-      # 💡 [保險機制] 清除多餘換行，防止網址毀損
       IMG_NAMES=$(cat img_names.txt | tr -d '\r\n')
       FIRST_IMG=$(echo$IMG_NAMES | cut -d',' -f1)
       IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
-      echo "🔍 等待圖片上線：$IMG_URL"
       for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$IMG_URL")
-        if [ "$HTTP_STATUS" == "200" ]; then echo "✅ 圖片已上線！"; break; fi
+        if [ "$HTTP_STATUS" == "200" ]; then echo "Image Online!"; break; fi
         sleep 15
       done
       sleep 5
 
-  # STREAMING_CHUNK: 發布至 Threads
   - name: Post to Threads
     continue-on-error: true
     env:
@@ -60,8 +40,6 @@ steps:
       IMG_NAMES=$(cat img_names.txt | tr -d '\r\n')
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       CHILDREN_IDS=""
-      
-      echo "1️⃣ [Threads] 建立多圖子項目..."
       for IMG in "${IMGS[@]}"; do
         IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
         RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=IMAGE" --data-urlencode "image_url=$IMG_URL" --data-urlencode "is_carousel_item=true" --data-urlencode "access_token=$TOKEN")
@@ -71,22 +49,17 @@ steps:
         fi
         sleep 3
       done
-      
-      echo "2️⃣ [Threads] 發布主文..."
       RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=CAROUSEL" --data-urlencode "children=$CHILDREN_IDS" --data-urlencode text@caption.txt --data-urlencode "access_token=$TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       sleep 10
       POST_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
       POST_ID=$(echo$POST_RES | jq -r '.id')
-      
-      echo "3️⃣ [Threads] 蓋樓留言..."
       RES_C1=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN")
       curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$(echo $RES_C1 \vert{} jq -r '.id')&access_token=$TOKEN"
       sleep 5
       RES_C2=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment2.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN")
       curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$(echo $RES_C2 \vert{} jq -r '.id')&access_token=$TOKEN"
 
-  # STREAMING_CHUNK: 發布至 Instagram
   - name: Post to Instagram
     continue-on-error: true
     env:
@@ -96,8 +69,6 @@ steps:
       IMG_NAMES=$(cat img_names.txt | tr -d '\r\n')
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       IG_CHILDREN=""
-      
-      echo "1️⃣ [IG] 建立輪播圖片子項目..."
       for IMG in "${IMGS[@]}"; do
         IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
         RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$ACCOUNT_ID/media" --data-urlencode "image_url=$IMG_URL" --data-urlencode "is_carousel_item=true" -d "access_token=$TOKEN")
@@ -107,20 +78,15 @@ steps:
         fi
         sleep 3
       done
-      
-      echo "2️⃣ [IG] 發布主文..."
       RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v19.0/$ACCOUNT_ID/media" --data-urlencode "media_type=CAROUSEL" --data-urlencode "children=$IG_CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       sleep 15
       POST_RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$ACCOUNT_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$TOKEN")
       IG_POST_ID=$(echo$POST_RES | jq -r '.id')
-      
-      echo "3️⃣ [IG] 蓋樓留言..."
       curl -s -X POST "https://graph.facebook.com/v19.0/$IG_POST_ID/comments" --data-urlencode message@comment.txt -d "access_token=$TOKEN"
       sleep 5
       curl -s -X POST "https://graph.facebook.com/v19.0/$IG_POST_ID/comments" --data-urlencode message@comment2.txt -d "access_token=$TOKEN"
 
-  # STREAMING_CHUNK: 發布至 Facebook (引入最強的 JSON Array 寫法)
   - name: Post to Facebook Page
     continue-on-error: true
     env:
@@ -129,8 +95,6 @@ steps:
     run: |
       IMG_NAMES=$(cat img_names.txt | tr -d '\r\n')
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
-      
-      echo "1️⃣ [FB] 上傳未發布的圖片以獲取 media_fbid..."
       FB_MEDIA_IDS=()
       for IMG in "${IMGS[@]}"; do
         IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
@@ -141,25 +105,17 @@ steps:
         fi
         sleep 3
       done
-      
-      echo "2️⃣ [FB] 組合圖片 JSON 陣列並發布主文..."
       MEDIA_JSON="["
       for ID in "${FB_MEDIA_IDS[@]}"; do
         if [ "$MEDIA_JSON" != "[" ]; then MEDIA_JSON+=","; fi
         MEDIA_JSON+="{\"media_fbid\":\"$ID\"}"
       done
       MEDIA_JSON+="]"
-      
-      FB_POST_RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$PAGE_ID/feed" \
-        --data-urlencode message@caption.txt \
-        --data-urlencode "attached_media=$MEDIA_JSON" \
-        -d "access_token=$TOKEN")
+      FB_POST_RES=$(curl -s -X POST "https://graph.facebook.com/v19.0/$PAGE_ID/feed" --data-urlencode message@caption.txt --data-urlencode "attached_media=$MEDIA_JSON" -d "access_token=$TOKEN")
       FB_POST_ID=$(echo$FB_POST_RES | jq -r '.id')
-      
-      echo "3️⃣ [FB] 蓋樓留言..."
       curl -s -X POST "https://graph.facebook.com/v19.0/$FB_POST_ID/comments" --data-urlencode message@comment.txt -d "access_token=$TOKEN"
       sleep 5
       curl -s -X POST "https://graph.facebook.com/v19.0/$FB_POST_ID/comments" --data-urlencode message@comment2.txt -d "access_token=$TOKEN"
-      
-      echo "🎉 景點 10 圖輪播與三平台發布全部完成！"
+      echo "🎉 全部發布完成！"
+
 
