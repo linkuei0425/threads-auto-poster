@@ -1,9 +1,9 @@
-name: "✈️ 晚間小編 (三平台發佈 + 10留言蓋樓)"
+name: ✈️ 晚間小編 (三平台發佈 + 10留言蓋樓)
 
 on:
 workflow_dispatch:
 schedule:
-- cron: '0 10 * * 1,4'
+- cron: '0 10 * * 1,2,5,6'
 
 jobs:
 build_and_post:
@@ -13,57 +13,70 @@ contents: write
 steps:
 - uses: actions/checkout@v4
 
-  - name: "Setup Python"
+  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
-
-  - name: "Install"
+      
+  - name: Install
     run: pip install google-genai requests
-
-  - name: "Run AI script (執行景點腳本與 FB/IG 發佈)"
+    
+  - name: Run AI script (執行景點腳本與 FB/IG 發佈)
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
       FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_spot.py
-
-  - name: "Push Image and City Record to GitHub"
+    
+  - name: Push Image to GitHub (推播景點圖片)
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      git add .
-      git commit -m "Update Spot Image and City Record" || echo "No changes to commit"
-      git push
+      if ls images/SPOT/*.jpg 1> /dev/null 2>&1; then
+        git add images/SPOT/*.jpg
+        git commit -m "Update Spot Image"
+        git push
+      else
+        echo "沒有圖片需要上傳"
+      fi
 
-  - name: "Wait for GitHub Pages to Deploy"
+  - name: Wait for GitHub Pages to Deploy (等待景點圖片上線)
     run: |
       IMG_NAMES=$(cat img_names.txt)
-      FIRST_IMG=$(echo "$IMG_NAMES" | cut -d',' -f1)
+      FIRST_IMG=$(echo$IMG_NAMES | cut -d',' -f1)
       IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$FIRST_IMG"
       echo "🔍 正在等待圖片上線：$IMG_URL"
-      for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      
+      for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$IMG_URL")
         if [ "$HTTP_STATUS" == "200" ]; then
           echo "✅ 圖片已成功上線！"
           break
         fi
+        echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
         sleep 15
       done
       sleep 5
 
-  - name: "Post Main and Reply"
+  - name: Post Main and Reply (發布 Threads 多圖與最多10則留言)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
       IMG_NAMES=$(cat img_names.txt)
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       CHILDREN_IDS=""
+      
+      echo "📤 正在建立多圖子項目..."
       for IMG in "${IMGS[@]}"; do
         IMG_URL="https://linkuei0425.github.io/threads-auto-poster/images/SPOT/$IMG"
-        RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
-        ITEM_ID=$(echo "$RES_ITEM" | jq -r '.id')
+        RES_ITEM=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+          --data-urlencode "media_type=IMAGE" \
+          --data-urlencode "image_url=$IMG_URL" \
+          --data-urlencode "is_carousel_item=true" \
+          --data-urlencode "access_token=$TOKEN")
+          
+        ITEM_ID=$(echo$RES_ITEM | jq -r '.id')
         if [ -z "$CHILDREN_IDS" ]; then
           CHILDREN_IDS="$ITEM_ID"
         else
@@ -71,21 +84,40 @@ steps:
         fi
         sleep 3
       done
+
       sleep 5
-      RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=CAROUSEL" --data-urlencode "children=$CHILDREN_IDS" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
-      MAIN_ID=$(echo "$RES_MAIN" | jq -r '.id')
+      echo "📤 正在發布主文..."
+      RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+        --data-urlencode "media_type=CAROUSEL" \
+        --data-urlencode "children=$CHILDREN_IDS" \
+        --data-urlencode text@caption.txt \
+        --data-urlencode "access_token=$TOKEN")
+      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
+      
       sleep 15
-      PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish" -d "creation_id=$MAIN_ID" -d "access_token=$TOKEN")
-      POST_ID=$(echo "$PUBLISH_RES" | jq -r '.id')
-      for i in 1 2 3 4 5 6 7 8 9 10; do
+      PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+      POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
+      echo "✅ 主文發布成功，ID: $POST_ID"
+      
+      echo "💬 開始發布最多 10 則留言..."
+      for i in {1..10}; do
         if [ "$i" -eq 1 ]; then COMMENT_FILE="comment.txt"; else COMMENT_FILE="comment${i}.txt"; fi
+
         if [ -f "$COMMENT_FILE" ]; then
           sleep 10
-          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@$COMMENT_FILE -d "reply_to_id=$POST_ID" -d "access_token=$TOKEN")
-          COMMENT_ID=$(echo "$RES_COMMENT" | jq -r '.id')
+          RES_COMMENT=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+            --data-urlencode "media_type=TEXT" \
+            --data-urlencode text@$COMMENT_FILE \
+            --data-urlencode "reply_to_id=$POST_ID" \
+            --data-urlencode "access_token=$TOKEN")
+          COMMENT_ID=$(echo$RES_COMMENT | jq -r '.id')
+          
           sleep 5
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish" -d "creation_id=$COMMENT_ID" -d "access_token=$TOKEN"
+          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN"
+          echo "✅ 第 $i 則留言發布成功"
         else
+          echo "ℹ️ 找不到 $COMMENT_FILE，結束留言。"
           break
         fi
       done
+      echo "🎉 全部發布完成！"
