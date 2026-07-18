@@ -48,7 +48,7 @@ def run():
             f"  - address: (地址) 餐廳詳細地址。\n"
             f"  - google_maps_keyword: (搜尋關鍵字) 最容易在Google Maps搜到這家店的關鍵字。\n"
             f"  - image_prompt: (美食攝影咒語) 請用英文描述這道菜的畫面。不需加入器材或風格參數，只要專注描述『食物本身、擺盤、背景環境』即可。\n\n"
-            f"請務必以純 JSON 格式輸出，不要包含 Markdown 標記。確保除 image_prompt 外皆為繁體中文。"
+            f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記 (如 ```json 等)。確保除 image_prompt 外皆為繁體中文。"
         )
         
         res = client.models.generate_content(
