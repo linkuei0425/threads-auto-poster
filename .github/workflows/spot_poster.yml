@@ -1,12 +1,12 @@
-name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:schedule:# 每週一與週五的 UTC 10:00 執行 (台灣時間 18:00)- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- uses: actions/checkout@v4  - name: Setup Python
+name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:schedule:# 每週一與週五的 UTC 10:00 執行 (台灣時間 18:00)- cron: '0 10 * * 1,5'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
       
-  - name: Install
+  - name: Install Dependencies
     run: pip install google-genai requests
     
-  - name: Run AI script (執行景點腳本與 FB/IG 發佈)
+  - name: Run AI Script (執行景點腳本與 FB/IG 發佈)
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
@@ -14,11 +14,10 @@ name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:sch
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_spot.py
     
-  - name: Push Image and City Setup to GitHub (推播圖片及城市設定)
+  - name: Push Images and City Setup to GitHub
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      # 加入圖片與 city.txt
       git add images/SPOT/*.jpg city.txt
       git commit -m "Update Spot Images and City Setup" || echo "No changes to commit"
       git push
@@ -26,7 +25,6 @@ name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:sch
   - name: Wait for GitHub Pages to Deploy
     run: |
       IMG_NAMES=$(cat img_names.txt)
-      # Bash 安全字串切割，避免空值報錯
       IFS=',' read -ra IMGS <<< "$IMG_NAMES"
       FIRST_IMG="${IMGS[0]}"
       
@@ -49,7 +47,7 @@ name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:sch
       done
       sleep 5
 
-  - name: Post Main and Reply (發布 Threads 8圖輪播與留言)
+  - name: Post Main and Reply (發布 Threads 8圖與留言)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
@@ -126,4 +124,5 @@ name: ✈️ 晚間小編 (三平台發佈 + 景點8圖)on:workflow_dispatch:sch
         fi
       done
       echo "🎉 全部發布完成！"
+
 
