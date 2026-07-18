@@ -1,12 +1,12 @@
-name: 🍴 晚間小編 (三平台發佈 + 餐廳8圖連動)on:workflow_dispatch:schedule:# 每週二與週六的 UTC 10:00 執行 (台灣時間 18:00)，剛好接在景點發文的隔天- cron: '0 10 * * 2,6'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- uses: actions/checkout@v4  - name: Setup Python
+name: 🍴 晚間小編 (三平台發佈 + 餐廳8圖連動)on:workflow_dispatch:schedule:# 每週二與週六的 UTC 10:00 執行 (台灣時間 18:00)，接在景點發文的隔天- cron: '0 10 * * 2,6'jobs:build_and_post:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
       
-  - name: Install
+  - name: Install Dependencies
     run: pip install google-genai requests
     
-  - name: Run AI script (讀取前一天城市、執行餐廳腳本與 FB/IG 發佈)
+  - name: Run AI Script (讀取前一天城市、執行餐廳腳本與 FB/IG 發佈)
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
@@ -14,7 +14,7 @@ name: 🍴 晚間小編 (三平台發佈 + 餐廳8圖連動)on:workflow_dispatch
       IG_ACCOUNT_ID: ${{ secrets.IG_ACCOUNT_ID }}
     run: python daily_food.py
     
-  - name: Push Image to GitHub
+  - name: Push Images to GitHub
     run: |
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -47,7 +47,7 @@ name: 🍴 晚間小編 (三平台發佈 + 餐廳8圖連動)on:workflow_dispatch
       done
       sleep 5
 
-  - name: Post Main and Reply (發布 Threads 8圖輪播與留言)
+  - name: Post Main and Reply (發布 Threads 8圖與留言)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
