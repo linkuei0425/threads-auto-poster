@@ -1,4 +1,4 @@
-name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'jobs:run:runs-on: ubuntu-latestpermissions:contents: writesteps:- uses: actions/checkout@v4  - name: Setup Python
+name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'💡 新增排隊機制：確保所有發文腳本一次只能執行一個，避免 Git 衝突或 Pages 取消concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:run:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
@@ -17,6 +17,8 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'jo
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
       git add .
       git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
+      # 加上 pull 確保不會因為遠端有新版本而 push 失敗
+      git pull --rebase origin main || true
       git push
 
   - name: Wait for GitHub Pages to Deploy
