@@ -88,7 +88,7 @@ def post_to_fb_and_ig(text, image_paths):
                         time.sleep(10)
                         pub_res = requests.post(pub_url, data=pub_payload).json()
                         if "id" in pub_res:
-                            print(f"✅ Instagram 發布成功！(Post ID: {pub_res['id']})")
+                            print(f"✅ Instagram 發布成功！")
     except Exception as e:
         print(f"💥 FB/IG 發布錯誤：{e}")
 
@@ -116,14 +116,11 @@ def run():
             "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
         ]
-        
         themes = ["歷史古蹟", "文青巷弄", "自然絕景", "網美打卡", "當地人私房秘境", "浪漫夜景", "特色建築", "藝術展區"]
         selected_city = random.choice(target_cities)
         themes_str = "、".join(themes)
         
         print(f"🎯 本次抽中城市：【{selected_city}】，準備寫入 city.txt 給明日的餐廳任務使用...")
-        
-        # 建立連動機制檔案
         with open("city.txt", "w", encoding="utf-8") as f:
             f.write(selected_city)
         
@@ -136,7 +133,7 @@ def run():
             f"- spots: (8 個景點的陣列)\n"
             f"  - spot_name: 景點名稱\n"
             f"  - spot_theme: 所屬主題\n"
-            f"  - image_prompt: 為了達到極致的擬真手機攝影質感，『強制』在開頭或結尾加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight. Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look.' 絕不要使用任何強調完美或AI生成的字眼。\n"
+            f"  - image_prompt: 為了達到極致的擬真手機攝影質感，『強制』在開頭加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens. Clear, crisp, natural daylight. Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look.' 描述具體畫面，絕不要使用強調完美或AI生成的字眼。\n"
             f"  - transportation: 詳細交通攻略\n"
             f"  - google_maps_keyword: Google Maps 搜尋關鍵字\n\n"
             f"確保以純 JSON 格式輸出，全中文(image_prompt除外)。"
@@ -145,10 +142,7 @@ def run():
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.8
-            )
+            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.8)
         )
         
         data = json.loads(res.text)
@@ -167,20 +161,24 @@ def run():
         fb_ig_caption = caption + "\n\n" + "\n\n".join(comment_texts)
 
         img_dir = "images/SPOT"
+        if os.path.exists(img_dir) and not os.path.isdir(img_dir): os.remove(img_dir)
         os.makedirs(img_dir, exist_ok=True)
+        # 清除舊照片
+        for f in os.listdir(img_dir):
+            os.remove(os.path.join(img_dir, f))
+            
         img_names, local_img_paths = [], []
         
         for i, spot in enumerate(spots[:8]):
             image_prompt = spot.get("image_prompt")
             print(f"🎨 生成第 {i+1} 張圖片 (手機實拍風格)...")
             try:
-                # 設定 aspect_ratio="9:16" 生成直式圖片
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="9:16")
+                        image_config=types.ImageConfig(aspect_ratio="9:16") # 強制直式 9:16
                     )
                 )
                 
@@ -200,6 +198,10 @@ def run():
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
         with open("caption.txt", "w", encoding="utf-8") as f: f.write(caption)
         
+        # 清除舊的 comment*.txt
+        for file in os.listdir("."):
+            if file.startswith("comment") and file.endswith(".txt"): os.remove(file)
+            
         for i, text in enumerate(comment_texts):
             file_name = "comment.txt" if i == 0 else f"comment{i+1}.txt"
             with open(file_name, "w", encoding="utf-8") as f: f.write(text)
