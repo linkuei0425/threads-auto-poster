@@ -1,16 +1,5 @@
-name: Spot Auto Poster Newon:
-workflow_dispatch:
-schedule:
-- cron: '0 10 * * 1,5'concurrency:
-group: "auto-poster-queue"
-cancel-in-progress: falsejobs:
-build:
-runs-on: ubuntu-latest
-permissions:
-contents: write
-steps:
-- name: Checkout Repository
-uses: actions/checkout@v4  - name: Setup Python
+name: "Spot Auto Poster New"on:
+workflow_dispatch: {}schedule:- cron: '0 10 * * 1,5'concurrency:group: "auto-poster-queue"cancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
@@ -156,3 +145,4 @@ uses: actions/checkout@v4  - name: Setup Python
       echo "📤 [FB] 正在發布多圖貼文..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
       echo "✅ [FB] 發布指令已送出！"
+
