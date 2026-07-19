@@ -144,3 +144,4 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       echo "📤 [FB] 正在發布多圖貼文..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
       echo "✅ [FB] 發布指令已送出！"
+
