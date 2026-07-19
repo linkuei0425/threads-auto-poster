@@ -108,7 +108,7 @@ jobs:
       - name: Post to Instagram (Carousel)
         env:
           META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-          IG_ID: ${{ secrets.IG_USER_ID }}
+          IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO=$(basename "${{ github.repository }}")
