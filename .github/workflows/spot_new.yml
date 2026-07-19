@@ -1,4 +1,4 @@
-name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'concurrency:group: auto-poster-queuecancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
+name: Spot Auto Poster Newon:workflow_dispatch: {}schedule:- cron: '0 10 * * 1,5'concurrency:group: auto-poster-queuecancel-in-progress: falsejobs:build:runs-on: ubuntu-latestpermissions:contents: writesteps:- name: Checkout Repositoryuses: actions/checkout@v4  - name: Setup Python
     uses: actions/setup-python@v5
     with:
       python-version: '3.10'
@@ -16,7 +16,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       git config --global user.name "github-actions[bot]"
       git config --global user.email "github-actions[bot]@users.noreply.github.com"
       git add .
-      git commit -m "Auto Update Spot Posts" || echo "No changes"
+      git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
       git pull --rebase origin main || true
       git push
 
@@ -29,16 +29,19 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
       FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
       
+      echo "Waiting for first image: $FIRST_IMG_URL"
       for i in {1..20}; do
         HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$FIRST_IMG_URL")
         if [ "$HTTP_STATUS" == "200" ]; then
+          echo "Image is online!"
           break
         fi
+        echo "Not online yet (Status: $HTTP_STATUS)... Waiting 15s ($i/20)"
         sleep 15
       done
       sleep 10
 
-  - name: Post to Threads
+  - name: Post to Threads (Carousel + 10 Comments)
     env:
       TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
     run: |
@@ -49,6 +52,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
       CHILDREN=""
       
+      echo "[Threads] Uploading 10 images to stash..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
@@ -60,23 +64,28 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       CHILDREN=${CHILDREN%,}
       
       sleep 15
+      echo "[Threads] Creating carousel main post..."
       RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       
       sleep 15
+      echo "[Threads] Publishing post..."
       PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
       POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
+      echo "[Threads] Main post published successfully! ID: $POST_ID"
       
+      echo "[Threads] Preparing to publish 10 traffic info comments..."
       for i in {1..10}; do
         if [ -f "comment${i}.txt" ]; then
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
           COMMENT_ID=$(cat temp_res.json | jq -r '.id')
           curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN" > /dev/null
+          echo "[Threads] Comment $i published successfully"
           sleep 5
         fi
       done
 
-  - name: Post to Instagram
+  - name: Post to Instagram (Carousel)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
       IG_ID: ${{ secrets.IG_USER_ID }}
@@ -88,6 +97,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
       CHILDREN=""
       
+      echo "[IG] Uploading images to stash..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
@@ -99,13 +109,16 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       CHILDREN=${CHILDREN%,}
       
       sleep 20
+      echo "[IG] Creating carousel main post..."
       RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
       MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
       
       sleep 15
+      echo "[IG] Publishing post..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
+      echo "[IG] Carousel publish command sent!"
 
-  - name: Post to Facebook Page
+  - name: Post to Facebook Page (Multi-Photo)
     env:
       META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
       FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
@@ -117,6 +130,7 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
       ATTACHED_MEDIA="["
       
+      echo "[FB] Uploading unpublished photos..."
       for img in "${IMG_ARRAY[@]}"; do
         IMG_URL="${BASE_URL}/${img}"
         RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$META_TOKEN")
@@ -127,4 +141,6 @@ name: Spot Auto Poster Newon:workflow_dispatch:schedule:- cron: '0 10 * * 1,5'co
       done
       ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
       
+      echo "[FB] Publishing multi-photo post..."
       curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
+      echo "[FB] Publish command sent!"
