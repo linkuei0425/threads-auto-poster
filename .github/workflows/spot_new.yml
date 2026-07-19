@@ -1,153 +1,166 @@
-STREAMING_CHUNK：正在設定工作流程觸發器和並發性...姓名：“Spot Auto Poster New”在：
-workflow_dispatch: {}
-日程：
-- cron: '0 10 * * 1,5'並發性：
-組："auto-poster-queue"
-取消進行中：否STREAMING_CHUNK：定義建置作業與環境...工作機會：
-建造：
-運行平台：ubuntu-latest
-權限：
-內容：寫
-步驟：
-- 名稱：檢出儲存庫
-使用方式：actions/checkout@v4STREAMING_CHUNK：正在設定 Python 及其相依性...  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: '3.10'
+name: "Spot Auto Poster New"
 
-  - name: Install dependencies
-    run: pip install google-genai requests pillow
-STREAMING_CHUNK：正在執行主腳本並提交變更...  - name: Run Script
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-    run: python daily_spot.py
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 10 * * 1,5'
 
-  - name: Commit to GitHub
-    run: |
-      git config --global user.name "github-actions[bot]"
-      git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      git add .
-      git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
-      git pull --rebase origin main || true
-      git push
-STREAMING_CHUNK:Waiting for GitHub Pages deployment...  - name: Wait for GitHub Pages to Deploy
-    run: |
-      OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-      REPO=$(basename "${{ github.repository }}")
-      BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-      IMG_NAMES=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
-      
-      echo "🔍 正在等待首圖上線：$FIRST_IMG_URL"
-      for i in {1..20}; do
-        HTTP_STATUS=$(curl -o /dev/null -s -w "\%{http_code}\n" "$FIRST_IMG_URL")
-        if [ "$HTTP_STATUS" == "200" ]; then
-          echo "✅ 圖片已成功上線！"
-          break
-        fi
-        echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
-        sleep 15
-      done
-      sleep 10
-STREAMING_CHUNK:Posting media to Threads...  - name: Post to Threads (Carousel + 10 Comments)
-    env:
-      TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-    run: |
-      OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-      REPO=$(basename "${{ github.repository }}")
-      BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-      IMG_NAMES=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      CHILDREN=""
-      
-      echo "📤 [Threads] 正在上傳 10 張圖片至暫存區..."
-      for img in "${IMG_ARRAY[@]}"; do
-        IMG_URL="${BASE_URL}/${img}"
-        RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
-        ID=$(echo$RES | jq -r '.id')
-        if [ "$ID" != "null" ] && [ -n "$ID" ]; then
-          CHILDREN="${CHILDREN}${ID},"
-        fi
-      done
-      CHILDREN=${CHILDREN%,}
-      
-      sleep 15
-      echo "📤 [Threads] 正在建立輪播主文..."
-      RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
-      
-      sleep 15
-      echo "📤 [Threads] 正在正式發布貼文..."
-      PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
-      POST_ID=$(echo$PUBLISH_RES | jq -r '.id')
-      echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
-      
-      echo "📤 [Threads] 準備依序發布 10 則交通資訊留言..."
-      for i in {1..10}; do
-        if [ -f "comment${i}.txt" ]; then
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
-          COMMENT_ID=$(cat temp_res.json | jq -r '.id')
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN" > /dev/null
-          echo "✅ [Threads] 留言 $i 發布成功"
-          sleep 5
-        fi
-      done
-STREAMING_CHUNK:Posting media to Instagram...  - name: Post to Instagram (Carousel)
-    env:
-      META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-      IG_ID: ${{ secrets.IG_USER_ID }}
-    run: |
-      OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-      REPO=$(basename "${{ github.repository }}")
-      BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-      IMG_NAMES=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      CHILDREN=""
-      
-      echo "📤 [IG] 正在上傳圖片至暫存區..."
-      for img in "${IMG_ARRAY[@]}"; do
-        IMG_URL="${BASE_URL}/${img}"
-        RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
-        ID=$(echo$RES | jq -r '.id')
-        if [ "$ID" != "null" ] && [ -n "$ID" ]; then
-          CHILDREN="${CHILDREN}${ID},"
-        fi
-      done
-      CHILDREN=${CHILDREN%,}
-      
-      sleep 20
-      echo "📤 [IG] 正在建立輪播主文..."
-      RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id')
-      
-      sleep 15
-      echo "📤 [IG] 正在正式發布貼文..."
-      curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
-      echo "✅ [IG] 輪播圖發布指令已送出！"
-STREAMING_CHUNK:Posting media to Facebook Page...  - name: Post to Facebook Page (Multi-Photo)
-    env:
-      META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-      FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-    run: |
-      OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-      REPO=$(basename "${{ github.repository }}")
-      BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-      IMG_NAMES=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-      ATTACHED_MEDIA="["
-      
-      echo "📤 [FB] 正在上傳未公開的照片..."
-      for img in "${IMG_ARRAY[@]}"; do
-        IMG_URL="${BASE_URL}/${img}"
-        RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$META_TOKEN")
-        PHOTO_ID=$(echo$RES | jq -r '.id')
-        if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
-          ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
-        fi
-      done
-      ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
-      
-      echo "📤 [FB] 正在發布多圖貼文..."
-      curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
-      echo "✅ [FB] 發布指令已送出！"
+concurrency:
+  group: "auto-poster-queue"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install google-genai requests pillow
+
+      - name: Run Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python daily_spot.py
+
+      - name: Commit to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
+          git pull --rebase origin main || true
+          git push
+
+      - name: Wait for GitHub Pages to Deploy
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(basename "${{ github.repository }}")
+          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
+          IMG_NAMES=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
+          
+          echo "🔍 正在等待首圖上線：$FIRST_IMG_URL"
+          for i in {1..20}; do
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$FIRST_IMG_URL")
+            if [ "$HTTP_STATUS" == "200" ]; then
+              echo "✅ 圖片已成功上線！"
+              break
+            fi
+            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+            sleep 15
+          done
+          sleep 10
+
+      - name: Post to Threads (Carousel + 10 Comments)
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(basename "${{ github.repository }}")
+          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
+          IMG_NAMES=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          CHILDREN=""
+          
+          echo "📤 [Threads] 正在上傳 10 張圖片至暫存區..."
+          for img in "${IMG_ARRAY[@]}"; do
+            IMG_URL="${BASE_URL}/${img}"
+            RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
+            ID=$(echo $RES | jq -r '.id')
+            if [ "$ID" != "null" ] && [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          sleep 15
+          echo "📤 [Threads] 正在建立輪播主文..."
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          
+          sleep 15
+          echo "📤 [Threads] 正在正式發布貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
+          
+          echo "📤 [Threads] 準備依序發布 10 則交通資訊留言..."
+          for i in {1..10}; do
+            if [ -f "comment${i}.txt" ]; then
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
+              COMMENT_ID=$(cat temp_res.json | jq -r '.id')
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN" > /dev/null
+              echo "✅ [Threads] 留言 $i 發布成功"
+              sleep 5
+            fi
+          done
+
+      - name: Post to Instagram (Carousel)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          IG_ID: ${{ secrets.IG_USER_ID }}
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(basename "${{ github.repository }}")
+          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
+          IMG_NAMES=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          CHILDREN=""
+          
+          echo "📤 [IG] 正在上傳圖片至暫存區..."
+          for img in "${IMG_ARRAY[@]}"; do
+            IMG_URL="${BASE_URL}/${img}"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
+            ID=$(echo $RES | jq -r '.id')
+            if [ "$ID" != "null" ] && [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          sleep 20
+          echo "📤 [IG] 正在建立輪播主文..."
+          RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
+          
+          sleep 15
+          echo "📤 [IG] 正在正式發布貼文..."
+          curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
+          echo "✅ [IG] 輪播圖發布指令已送出！"
+
+      - name: Post to Facebook Page (Multi-Photo)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(basename "${{ github.repository }}")
+          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
+          IMG_NAMES=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          ATTACHED_MEDIA="["
+          
+          echo "📤 [FB] 正在上傳未公開的照片..."
+          for img in "${IMG_ARRAY[@]}"; do
+            IMG_URL="${BASE_URL}/${img}"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$META_TOKEN")
+            PHOTO_ID=$(echo $RES | jq -r '.id')
+            if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
+              ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
+            fi
+          done
+          ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
+          
+          echo "📤 [FB] 正在發布多圖貼文..."
+          curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
+          echo "✅ [FB] 發布指令已送出！"
