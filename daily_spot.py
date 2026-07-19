@@ -6,7 +6,6 @@ import random
 from google import genai
 from google.genai import types
 
-# 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
@@ -16,7 +15,6 @@ def run():
             
         client = genai.Client(api_key=GEMINI_KEY)
         
-        # --- A. Gemini 生成貼文文案與 10 個景點資料 ---
         print("🤖 系統正在隨機抽取城市與主題...")
         
         target_cities = [
@@ -41,10 +39,12 @@ def run():
         if os.path.exists("city.txt"):
             with open("city.txt", "r", encoding="utf-8") as f: 
                 selected_city = f.read().strip()
+            print(f"📌 發現保留的 city.txt，繼續使用城市：【{selected_city}】")
         else:
             selected_city = random.choice(target_cities)
             with open("city.txt", "w", encoding="utf-8") as f:
                 f.write(selected_city)
+            print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
                 
         selected_theme = random.choice(themes)
         print(f"🎯 本次抽中：【{selected_city}】的【{selected_theme}】，準備交由 Gemini 生成...")
@@ -91,7 +91,6 @@ def run():
         with open("caption.txt", "w", encoding="utf-8") as f: 
             f.write(caption)
             
-        # 產生多個留言檔案，每個景點獨立一個留言
         print(f"📝 正在建立 {len(spots)} 則獨立留言檔...")
         for i, spot in enumerate(spots):
             spot_name = spot.get("spot_name", "未知景點")
@@ -106,11 +105,9 @@ def run():
             
             if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
             
-            # 寫入 comment1.txt ~ comment10.txt
             with open(f"comment{i+1}.txt", "w", encoding="utf-8") as f:
                 f.write(comment_text)
 
-        # --- B. Gemini 生成 10 張圖片並儲存 ---
         img_dir = "images/SPOT"
         if os.path.exists(img_dir) and not os.path.isdir(img_dir):
             os.remove(img_dir)
@@ -132,7 +129,7 @@ def run():
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="9:16") # 強制要求 9:16
+                        image_config=types.ImageConfig(aspect_ratio="9:16")
                     )
                 )
                 
@@ -145,7 +142,6 @@ def run():
                         img_names.append(img_name)
                         break
                         
-                # 避免連續呼叫 10 次觸發 API Rate Limit 限制，暫停 5 秒
                 time.sleep(5)
                 
             except Exception as e:
