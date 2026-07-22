@@ -69,15 +69,22 @@ def run():
             
             try:
                 img = client.models.generate_content(
-                    model='gemini-2.5-flash-image', 
+                    model='gemini-2.5-flash', 
                     contents=r['image_prompt'],
-                    config=types.GenerateContentConfig(image_config=types.ImageConfig(aspect_ratio="9:16"))
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio="9:16")
+                    )
                 )
                 
                 img_name = f"food_{int(time.time())}_{i}.jpg"
                 path = f"{img_dir}/{img_name}"
-                img.parts[0].as_image().save(path)
-                img_names.append(img_name)
+                
+                for part in img.parts:
+                    if part.inline_data:
+                        part.as_image().save(path)
+                        img_names.append(img_name)
+                        break
                 
             except Exception as e:
                 print(f"💥 生成 {store_name} 圖片時發生錯誤：{e}")
