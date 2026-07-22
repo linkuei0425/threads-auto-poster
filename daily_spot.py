@@ -51,11 +51,11 @@ def run():
         
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 10 個符合【{selected_theme}】主題的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 8 個符合【{selected_theme}】主題的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
-            f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業旅遊家，用輕鬆口吻簡單盤點這 10 個景點。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細交通』。這裡『絕對不要』寫出如何抵達或交通方式,也不要用副詞。480字內。\n"
+            f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業旅遊家，用輕鬆口吻簡單盤點這 8 個景點。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細交通』。這裡『絕對不要』寫出如何抵達或交通方式,也不要用副詞。480字內。\n"
             f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
-            f"- spots: (這是一個包含 10 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
+            f"- spots: (這是一個包含 8 個物件的陣列 Array，每個物件代表一個景點，需包含以下屬性)\n"
             f"  - spot_name: (景點名稱) 景點的精準名稱。\n"
             f"  - image_prompt: (英文咒語) 請根據該景點具體畫面撰寫咒語。為了打破 AI 塗抹感並模擬真實手機攝影，『強制』加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw travel photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 不要使用任何 master piece, 8k 等字眼。\n"
             f"  - transportation: (交通攻略) 詳細的自由行大眾交通方式，例如搭乘哪條地鐵、哪個出口、步行幾分鐘。越詳細越好。\n"
@@ -83,29 +83,32 @@ def run():
         caption = raw_caption.replace("\\n", "\n") 
         spots = data.get("spots", [])
         
-        if len(spots) < 10:
-            print(f"⚠️ 警告：AI 只有生成 {len(spots)} 個景點 (預期 10 個)。")
+        if len(spots) < 8:
+            print(f"⚠️ 警告：AI 只有生成 {len(spots)} 個景點 (預期 8 個)。")
 
         if len(caption) > 480: caption = caption[:475] + "..."
         
         with open("caption.txt", "w", encoding="utf-8") as f: 
             f.write(caption)
             
-        print(f"📝 正在建立 {len(spots)} 則獨立留言檔...")
-        for i, spot in enumerate(spots):
-            spot_name = spot.get("spot_name", "未知景點")
-            transportation = spot.get("transportation", "未知交通方式")
-            google_maps_keyword = spot.get("google_maps_keyword", "未知關鍵字")
+        print(f"📝 正在建立留言檔 (每 2 個景點合併為 1 則)...")
+        # 合併留言邏輯：每 2 個 spot 寫入一個 txt 檔案
+        for i in range(0, len(spots), 2):
+            chunk = spots[i:i+2]
+            comment_text = ""
+            for j, spot in enumerate(chunk):
+                spot_idx = i + j + 1
+                spot_name = spot.get("spot_name", "未知景點")
+                transportation = spot.get("transportation", "未知交通方式")
+                google_maps_keyword = spot.get("google_maps_keyword", "未知關鍵字")
+                
+                comment_text += f"✨ 景點 {spot_idx}：{spot_name}\n🚆 交通：{transportation}\n🗺️ 搜尋：{google_maps_keyword}\n\n"
             
-            comment_text = (
-                f"✨ 景點 {i+1}：{spot_name}\n"
-                f"🚆 交通：{transportation}\n"
-                f"🗺️ 搜尋：{google_maps_keyword}"
-            )
-            
+            comment_text = comment_text.strip()
             if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
             
-            with open(f"comment{i+1}.txt", "w", encoding="utf-8") as f:
+            file_idx = (i // 2) + 1
+            with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
                 f.write(comment_text)
 
         img_dir = "images/SPOT"
@@ -152,7 +155,7 @@ def run():
             
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
             
-        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / {len(spots)} 個留言檔 / 產出 {len(img_names)} 張圖片")
+        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
 
     except Exception as e:
         print(f"💥 發生嚴重錯誤：{e}")
