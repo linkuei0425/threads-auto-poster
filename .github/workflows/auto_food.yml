@@ -131,8 +131,23 @@ jobs:
           
           sleep 15
           echo "📤 [IG] 正在正式發布貼文..."
-          curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
-          echo "✅ [IG] 輪播圖發布指令已送出！"
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
+          IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
+          
+          echo "📤 [IG] 準備依序發布留言..."
+          if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
+            for i in {1..6}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [IG] 發布留言 ${i}..."
+                curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
+                sleep 5
+              fi
+            done
+            echo "✅ [IG] 留言發佈完成！"
+          else
+            echo "❌ [IG] 找不到主文 ID，跳過留言發佈。"
+          fi
 
       - name: Post to Facebook Page (Multi-Photo)
         env:
@@ -158,5 +173,20 @@ jobs:
           ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
           
           echo "📤 [FB] 正在發布多圖貼文..."
-          curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
-          echo "✅ [FB] 發布指令已送出！"
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN")
+          FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
+          
+          echo "📤 [FB] 準備依序發布留言..."
+          if [ "$FB_POST_ID" != "null" ] && [ -n "$FB_POST_ID" ]; then
+            for i in {1..6}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [FB] 發布留言 ${i}..."
+                curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
+                sleep 5
+              fi
+            done
+            echo "✅ [FB] 留言發佈完成！"
+          else
+            echo "❌ [FB] 找不到主文 ID，跳過留言發佈。"
+          fi
