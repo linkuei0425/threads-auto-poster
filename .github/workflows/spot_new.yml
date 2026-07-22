@@ -101,7 +101,7 @@ jobs:
               COMMENT_ID=$(cat temp_res.json | jq -r '.id')
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$TOKEN" > /dev/null
               echo "✅ [Threads] 留言 $i 發布成功"
-              sleep 5
+              sleep 15
             fi
           done
 
