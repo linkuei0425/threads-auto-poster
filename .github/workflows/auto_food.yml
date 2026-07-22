@@ -1,9 +1,13 @@
-name: "🍴 餐廳自動發布排程 (6店6留言)"
+name: "🍴 餐廳自動發布排程 (6店3留言)"
 
 on:
   workflow_dispatch: {}
   schedule:
     - cron: '0 10 * * 2,6'
+
+concurrency:
+  group: "auto-poster-queue"
+  cancel-in-progress: false
 
 jobs:
   build_and_post:
@@ -32,7 +36,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto Update Food Posts" || echo "No changes"
+          git commit -m "Auto Update Food Posts (6 Carousel Images, 3 Comments)" || echo "No changes"
           git pull --rebase origin main || true
           git push
           
@@ -90,14 +94,14 @@ jobs:
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布完成 ID: $POST_ID"
           
-          echo "📤 [Threads] 準備依序發布留言..."
-          for i in {1..6}; do
+          echo "📤 [Threads] 準備依序發布 3 則留言..."
+          for i in {1..3}; do
             if [ -f "comment${i}.txt" ]; then
               echo "📤 發布留言 ${i}..."
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
               C_ID=$(cat temp_res.json | jq -r '.id')
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C_ID&access_token=$TOKEN" > /dev/null
-              sleep 5
+              sleep 15
             fi
           done
 
@@ -137,11 +141,11 @@ jobs:
           
           echo "📤 [IG] 準備依序發布留言..."
           if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
-            for i in {1..6}; do
+            for i in {1..3}; do
               if [ -f "comment${i}.txt" ]; then
                 echo "📤 [IG] 發布留言 ${i}..."
                 curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
-                sleep 5
+                sleep 15
               fi
             done
             echo "✅ [IG] 留言發佈完成！"
@@ -179,11 +183,11 @@ jobs:
           
           echo "📤 [FB] 準備依序發布留言..."
           if [ "$FB_POST_ID" != "null" ] && [ -n "$FB_POST_ID" ]; then
-            for i in {1..6}; do
+            for i in {1..3}; do
               if [ -f "comment${i}.txt" ]; then
                 echo "📤 [FB] 發布留言 ${i}..."
                 curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
-                sleep 5
+                sleep 15
               fi
             done
             echo "✅ [FB] 留言發佈完成！"
