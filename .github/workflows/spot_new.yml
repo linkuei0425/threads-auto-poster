@@ -36,7 +36,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Auto Update Spot Posts (10 Carousel Images)" || echo "No changes"
+          git commit -m "Auto Update Spot Posts (8 Carousel Images)" || echo "No changes"
           git pull --rebase origin main || true
           git push
 
@@ -61,7 +61,7 @@ jobs:
           done
           sleep 10
 
-      - name: Post to Threads (Carousel + 10 Comments)
+      - name: Post to Threads (Carousel + 4 Comments)
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
@@ -72,7 +72,7 @@ jobs:
           IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
           CHILDREN=""
           
-          echo "📤 [Threads] 正在上傳 10 張圖片至暫存區..."
+          echo "📤 [Threads] 正在上傳 8 張圖片至暫存區..."
           for img in "${IMG_ARRAY[@]}"; do
             IMG_URL="${BASE_URL}/${img}"
             RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$TOKEN")
@@ -94,8 +94,8 @@ jobs:
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
           
-          echo "📤 [Threads] 準備依序發布 10 則交通資訊留言..."
-          for i in {1..10}; do
+          echo "📤 [Threads] 準備依序發布 4 則交通資訊留言..."
+          for i in {1..4}; do
             if [ -f "comment${i}.txt" ]; then
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
               COMMENT_ID=$(cat temp_res.json | jq -r '.id')
@@ -135,8 +135,23 @@ jobs:
           
           sleep 15
           echo "📤 [IG] 正在正式發布貼文..."
-          curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN"
-          echo "✅ [IG] 輪播圖發布指令已送出！"
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
+          IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
+          
+          echo "📤 [IG] 準備依序發布 4 則留言..."
+          if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
+            for i in {1..4}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [IG] 發布留言 ${i}..."
+                curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
+                sleep 5
+              fi
+            done
+            echo "✅ [IG] 留言發佈完成！"
+          else
+            echo "❌ [IG] 找不到主文 ID，跳過留言發佈。"
+          fi
 
       - name: Post to Facebook Page (Multi-Photo)
         env:
@@ -162,5 +177,20 @@ jobs:
           ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
           
           echo "📤 [FB] 正在發布多圖貼文..."
-          curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN"
-          echo "✅ [FB] 發布指令已送出！"
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN")
+          FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
+          
+          echo "📤 [FB] 準備依序發布 4 則留言..."
+          if [ "$FB_POST_ID" != "null" ] && [ -n "$FB_POST_ID" ]; then
+            for i in {1..4}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [FB] 發布留言 ${i}..."
+                curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN" > /dev/null
+                sleep 5
+              fi
+            done
+            echo "✅ [FB] 留言發佈完成！"
+          else
+            echo "❌ [FB] 找不到主文 ID，跳過留言發佈。"
+          fi
