@@ -10,26 +10,6 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
     try:
-        # 🟢 【全自動防呆機制】：利用 GitHub Actions 的 RUN_ID 來判斷是不是「重跑」
-        current_run_id = os.environ.get("GITHUB_RUN_ID", "local_test")
-        
-        last_run_id = ""
-        if os.path.exists("last_run_id.txt"):
-            with open("last_run_id.txt", "r", encoding="utf-8") as f:
-                last_run_id = f.read().strip()
-                
-        # 如果現在的 ID 跟上次紀錄的一樣，代表你在 GitHub 後台按了 Re-run
-        if current_run_id == last_run_id and current_run_id != "local_test":
-            print(f"✅ 偵測到這是同一次任務的重跑 (Run ID: {current_run_id})")
-            print("🛑 為節省費用，跳過 Gemini 生成，直接沿用剛才的檔案進入發文步驟！")
-            return  # 提早下班，不往下執行
-            
-        # 如果是新的 ID（全新的排程），就把新 ID 寫入檔案，並繼續呼叫 AI (後續寫入檔案時會自動覆蓋)
-        with open("last_run_id.txt", "w", encoding="utf-8") as f:
-            f.write(current_run_id)
-            
-        print(f"🚀 偵測到全新任務 (Run ID: {current_run_id})，開始呼叫 Gemini...")
-
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
@@ -54,7 +34,7 @@ def run():
             "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
         ]
-        themes = ["歷史古蹟", "文青巷弄", "自然絕景", "購物商圈", "傳統市場或夜市" ,"網美打卡", "當地人私房秘境", "浪漫夜景"]
+        themes_list = ["歷史古蹟", "文青巷弄", "自然絕景", "購物商圈", "傳統市場或夜市" ,"網美打卡", "當地人私房秘境", "浪漫夜景"]
         
         if os.path.exists("city.txt"):
             with open("city.txt", "r", encoding="utf-8") as f: 
@@ -66,12 +46,13 @@ def run():
                 f.write(selected_city)
             print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
                 
-        selected_theme = random.choice(themes)
-        print(f"🎯 本次抽中：【{selected_city}】的【{selected_theme}】，準備交由 Gemini 生成...")
+        themes_str = "、".join(themes_list)
+        print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元主題」景點...")
         
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 8 個符合【{selected_theme}】主題的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 8 個『不同類型』的真實存在知名地標或私房秘境（請勿介紹餐廳或美食）。\n"
+            f"   💡 【重要】：這 8 個景點必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 8 個都是同一種類型，越豐富越好！\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
             f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業旅遊家，用輕鬆口吻簡單盤點這 8 個景點。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細交通』。這裡『絕對不要』寫出如何抵達或交通方式,也不要用副詞。480字內。\n"
             f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
@@ -83,7 +64,6 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        # 🟢 文字模型降級：使用更便宜快速的 gemini-2.5-flash
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
@@ -109,7 +89,6 @@ def run():
 
         if len(caption) > 480: caption = caption[:475] + "..."
         
-        # 覆蓋寫入主文檔案
         with open("caption.txt", "w", encoding="utf-8") as f: 
             f.write(caption)
             
@@ -130,7 +109,6 @@ def run():
             if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
             
             file_idx = (i // 2) + 1
-            # 覆蓋寫入留言檔案
             with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
                 f.write(comment_text)
 
