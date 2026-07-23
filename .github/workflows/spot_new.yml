@@ -85,7 +85,6 @@ jobs:
             else
               echo "⚠️ [Threads Debug] 圖片上傳異常！Meta 回傳：$RES"
             fi
-            # 🛡️ 加入短暫延遲，避免連續上傳 8 張圖被 Meta 阻擋
             sleep 3
           done
           CHILDREN=${CHILDREN%,}
@@ -126,6 +125,9 @@ jobs:
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$CLEAN_TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
+          
+          echo "⏳ [Threads] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
           
           echo "📤 [Threads] 準備依序發布 4 則交通資訊留言 (以串文接龍方式)..."
           CURRENT_REPLY_TARGET=$POST_ID 
@@ -224,6 +226,9 @@ jobs:
           IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
           
+          echo "⏳ [IG] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
+          
           echo "📤 [IG] 準備依序發布 4 則留言..."
           if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
             for i in {1..4}; do
@@ -316,11 +321,13 @@ jobs:
           
           echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
           
+          echo "⏳ [FB] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
+          
           echo "📤 [FB] 準備依序發布 4 則留言..."
           for i in {1..4}; do
             if [ -f "comment${i}.txt" ]; then
               echo "📤 [FB] 發布留言 ${i}..."
-              # 這裡改為印出回應，以便觀察留言是否被阻擋
               COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" \
                    --data-urlencode message@comment${i}.txt \
                    -d "access_token=$CLEAN_META_TOKEN")
