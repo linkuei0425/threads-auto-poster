@@ -10,27 +10,6 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
     try:
-        # 🟢 【全自動防呆機制】：利用 GitHub Actions 的 RUN_ID 來判斷是不是「重跑」
-        current_run_id = os.environ.get("GITHUB_RUN_ID", "local_test")
-        
-        last_run_id = ""
-        # 為了不跟景點版打架，這裡改用 last_run_id_food.txt
-        if os.path.exists("last_run_id_food.txt"):
-            with open("last_run_id_food.txt", "r", encoding="utf-8") as f:
-                last_run_id = f.read().strip()
-                
-        # 如果現在的 ID 跟上次紀錄的一樣，代表你在 GitHub 後台按了 Re-run
-        if current_run_id == last_run_id and current_run_id != "local_test":
-            print(f"✅ 偵測到這是同一次任務的重跑 (Run ID: {current_run_id})")
-            print("🛑 為節省費用，跳過 Gemini 生成，直接沿用剛才的檔案進入發文步驟！")
-            return  # 提早下班，不往下執行
-            
-        # 如果是新的 ID（全新的排程），就把新 ID 寫入檔案，並繼續呼叫 AI
-        with open("last_run_id_food.txt", "w", encoding="utf-8") as f:
-            f.write(current_run_id)
-            
-        print(f"🚀 偵測到全新美食任務 (Run ID: {current_run_id})，開始呼叫 Gemini...")
-
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
@@ -55,7 +34,7 @@ def run():
             "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
             "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
         ]
-        themes = ["必吃在地小吃", "網美打卡咖啡廳", "傳統老店或夜市美食", "高質感特色餐廳", "隱藏版深夜食堂", "人氣排隊甜點"]
+        themes_list = ["必吃在地小吃", "網美打卡咖啡廳", "傳統老店或夜市美食", "高質感特色餐廳", "隱藏版深夜食堂", "人氣排隊甜點"]
         
         # 為了跟景點連戲，讀取由景點腳本保留的 city.txt
         if os.path.exists("city.txt"):
@@ -68,12 +47,13 @@ def run():
                 f.write(selected_city)
             print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
                 
-        selected_theme = random.choice(themes)
-        print(f"🎯 本次抽中美食主題：【{selected_city}】的【{selected_theme}】，準備交由 Gemini 生成...")
+        themes_str = "、".join(themes_list)
+        print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元美食主題」...")
         
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 6 個符合【{selected_theme}】主題的真實存在知名餐廳或在地美食（請勿介紹純景點）。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 6 個『不同類型』的真實存在知名餐廳或在地美食（請勿介紹純景點）。\n"
+            f"   💡 【重要】：這 6 間店必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 6 間都是同一種類型，越豐富越好！\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
             f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業美食家，用輕鬆口吻簡單盤點這 6 間店。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細資訊』。這裡『絕對不要』寫出地址或營業時間,也不要用副詞。480字內。\n"
             f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
@@ -85,7 +65,6 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        # 🟢 文字模型設定：依照附檔設定改回 gemini-2.5-flash
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
