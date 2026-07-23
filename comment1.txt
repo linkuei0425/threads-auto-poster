@@ -1,7 +1,7 @@
-✨ 景點 1：那不勒斯地下城 (Napoli Sotterranea)
-🚆 交通：搭乘地鐵1號線(Linea 1)至Università站，從出口Via Mezzocannone出來，步行約10分鐘即可抵達入口。
-🗺️ 搜尋：Napoli Sotterranea
+✨ 景點 1：拿坡里國立考古博物館
+🚆 交通：搭乘地鐵1號線(Metro Line 1)至「Museo」站，從出口步行約1分鐘即可抵達博物館入口。
+🗺️ 搜尋：Museo Archeologico Nazionale di Napoli
 
-✨ 景點 2：聖格雷戈里奧阿爾梅諾街 (Via San Gregorio Armeno)
-🚆 交通：搭乘地鐵1號線(Linea 1)至Dante站，步行約7分鐘即可到達這條街的入口。
-🗺️ 搜尋：Via San Gregorio Armeno
+✨ 景點 2：西班牙區
+🚆 交通：搭乘地鐵1號線(Metro Line 1)至「Toledo」站，從出口往西方向步行約3分鐘即可進入西班牙區。
+🗺️ 搜尋：Quartieri Spagnoli
