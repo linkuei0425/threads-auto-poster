@@ -9,6 +9,14 @@ from google.genai import types
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
+    # --- 🛡️ 防噴錢機制開始 🛡️ ---
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    if run_attempt != "1" and os.path.exists("caption.txt"):
+        print(f"♻️ 偵測到這是第 {run_attempt} 次重跑 (Re-run)！")
+        print("為了避免噴錢，將直接沿用舊有圖文檔案，跳過 Gemini API。")
+        return  # 直接結束 Python 腳本，讓 Actions 繼續拿舊檔案去嘗試發文
+    # --- 🛡️ 防噴錢機制結束 🛡️ ---
+
     try:
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
