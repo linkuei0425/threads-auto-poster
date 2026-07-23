@@ -83,12 +83,28 @@ jobs:
           done
           CHILDREN=${CHILDREN%,}
           
-          sleep 15
-          echo "📤 [Threads] 正在建立輪播主文..."
+          sleep 5
+          echo "📤 [Threads] 正在建立輪播主文容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
-          sleep 15
+          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 8 張圖片..."
+          for j in {1..15}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [Threads] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              ERR_MSG=$(echo $STATUS_RES | jq -r '.error_message')
+              echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/15)"
+            sleep 10
+          done
+
           echo "📤 [Threads] 正在正式發布貼文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
@@ -128,12 +144,27 @@ jobs:
           done
           CHILDREN=${CHILDREN%,}
           
-          sleep 20
-          echo "📤 [IG] 正在建立輪播主文..."
+          sleep 5
+          echo "📤 [IG] 正在建立輪播主文容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
-          sleep 15
+          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 8 張圖片..."
+          for j in {1..15}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status_code')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [IG] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              echo "❌ [IG] 伺服器處理失敗！"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/15)"
+            sleep 10
+          done
+
           echo "📤 [IG] 正在正式發布貼文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
           IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
