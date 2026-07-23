@@ -10,6 +10,12 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
     try:
+        # 🟢 【防呆省錢機制】：檢查是否已經有生成好的檔案
+        if os.path.exists("caption.txt") and os.path.exists("img_names.txt"):
+            print("✅ 發現既有的 caption.txt 與圖片紀錄！")
+            print("🛑 為了節省 API 費用，本次跳過呼叫 Gemini，直接使用舊有內容進行後續測試/發文。")
+            return  # 提早結束，讓 GitHub Action 直接進入發文步驟
+            
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
@@ -64,8 +70,9 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
+        # 🟢 【修改點】：文字模型換成更便宜的 2.5-flash-lite
         res = client.models.generate_content(
-            model='gemini-2.5-flash', 
+            model='gemini-2.5-flash-lite', 
             contents=task_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -129,6 +136,7 @@ def run():
                 
             print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
             try:
+                # 這裡保持用 gemini-2.5-flash-image
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
