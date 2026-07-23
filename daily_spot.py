@@ -83,9 +83,9 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        # 🟢 文字模型降級：使用更便宜快速的 gemini-2.5-flash-lite
+        # 🟢 文字模型降級：使用更便宜快速的 gemini-2.5-flash
         res = client.models.generate_content(
-            model='gemini-2.5-flash-lite', 
+            model='gemini-2.5-flash', 
             contents=task_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
