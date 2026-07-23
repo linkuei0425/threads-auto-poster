@@ -127,13 +127,33 @@ jobs:
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
           
-          echo "📤 [Threads] 準備依序發布 4 則交通資訊留言..."
+          echo "📤 [Threads] 準備依序發布 4 則交通資訊留言 (以串文接龍方式)..."
+          CURRENT_REPLY_TARGET=$POST_ID 
           for i in {1..4}; do
             if [ -f "comment${i}.txt" ]; then
-              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$CLEAN_TOKEN" > temp_res.json
-              COMMENT_ID=$(cat temp_res.json | jq -r '.id')
-              curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$CLEAN_TOKEN" > /dev/null
-              echo "✅ [Threads] 留言 $i 發布成功"
+              echo "📤 [Threads] 建立留言 $i 的容器..."
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" \
+                   --data-urlencode "media_type=TEXT" \
+                   --data-urlencode text@comment${i}.txt \
+                   --data-urlencode "reply_to_id=$CURRENT_REPLY_TARGET" \
+                   --data-urlencode "access_token=$CLEAN_TOKEN" > temp_res.json
+              
+              COMMENT_CONTAINER_ID=$(cat temp_res.json | jq -r '.id')
+              
+              if [ "$COMMENT_CONTAINER_ID" != "null" ] && [ -n "$COMMENT_CONTAINER_ID" ]; then
+                echo "📤 [Threads] 正在發布留言 $i (容器 ID: $COMMENT_CONTAINER_ID)..."
+                PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_CONTAINER_ID&access_token=$CLEAN_TOKEN")
+                PUBLISHED_ID=$(echo $PUBLISH_RES | jq -r '.id')
+                
+                if [ "$PUBLISHED_ID" != "null" ] && [ -n "$PUBLISHED_ID" ]; then
+                  echo "✅ [Threads] 留言 $i 發布成功！ID: $PUBLISHED_ID"
+                  CURRENT_REPLY_TARGET=$PUBLISHED_ID
+                else
+                  echo "❌ [Threads] 留言 $i 發布失敗！API 回應：$PUBLISH_RES"
+                fi
+              else
+                echo "❌ [Threads] 建立留言 $i 容器失敗！API 回應：$(cat temp_res.json)"
+              fi
               sleep 15
             fi
           done
@@ -209,11 +229,20 @@ jobs:
             for i in {1..4}; do
               if [ -f "comment${i}.txt" ]; then
                 echo "📤 [IG] 發布留言 ${i}..."
-                curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$CLEAN_META_TOKEN" > /dev/null
-                sleep 5
+                IG_COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" \
+                     --data-urlencode message@comment${i}.txt \
+                     -d "access_token=$CLEAN_META_TOKEN")
+                IG_COMMENT_ID=$(echo $IG_COMMENT_RES | jq -r '.id')
+                
+                if [ "$IG_COMMENT_ID" != "null" ] && [ -n "$IG_COMMENT_ID" ]; then
+                  echo "✅ [IG] 留言 $i 發布成功！ID: $IG_COMMENT_ID"
+                else
+                  echo "❌ [IG] 留言 $i 發布失敗！Meta 回傳：$IG_COMMENT_RES"
+                fi
+                sleep 15
               fi
             done
-            echo "✅ [IG] 留言發佈完成！"
+            echo "🎉 [IG] 留言發佈完成！"
           else
             echo "❌ [IG] 找不到主文 ID，跳過留言發佈。"
           fi
@@ -232,35 +261,77 @@ jobs:
           BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
           IMG_NAMES=$(cat img_names.txt)
           IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          
+          # 初始化變數
           ATTACHED_MEDIA="["
+          PHOTO_COUNT=0
           
           echo "📤 [FB] 正在上傳未公開的照片..."
           for img in "${IMG_ARRAY[@]}"; do
             IMG_URL="${BASE_URL}/${img}"
-            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$CLEAN_META_TOKEN")
+            echo "🔍 準備上傳: $IMG_URL"
+            
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/photos" \
+                 -d "url=$IMG_URL" \
+                 -d "published=false" \
+                 -d "access_token=$CLEAN_META_TOKEN")
+                 
             PHOTO_ID=$(echo $RES | jq -r '.id')
+            
             if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
               ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
+              PHOTO_COUNT=$((PHOTO_COUNT+1))
+              echo "✅ 圖片上傳成功，取得 Media ID: $PHOTO_ID"
+            else
+              echo "❌ 圖片上傳異常！Meta 回傳：$RES"
             fi
             sleep 3
           done
-          ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
           
-          echo "📤 [FB] 正在發布多圖貼文..."
-          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$CLEAN_META_TOKEN")
+          # 防呆：如果沒有任何照片上傳成功，就直接中斷，避免發出空貼文
+          if [ "$PHOTO_COUNT" -eq 0 ]; then
+             echo "❌ [FB] 致命錯誤：沒有任何照片成功上傳到暫存區，終止發文！"
+             exit 1
+          fi
+          
+          # 收尾 JSON 陣列 (移除最後一個多餘的逗號並加上右括號)
+          ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
+          echo "🔍 [FB Debug] 準備送出的 attached_media 結構：$ATTACHED_MEDIA"
+          
+          echo "📤 [FB] 正在發布多圖主文..."
+          # ⚠️ 關鍵修正：將 attached_media 改用 --data-urlencode，確保 JSON 符號不被破壞
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/feed" \
+               --data-urlencode message@caption.txt \
+               --data-urlencode "attached_media=$ATTACHED_MEDIA" \
+               -d "access_token=$CLEAN_META_TOKEN")
+               
           FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          
+          # 攔截發文失敗的狀況
+          if [ "$FB_POST_ID" == "null" ] || [ -z "$FB_POST_ID" ]; then
+             echo "❌ [FB] 致命錯誤：主文發布失敗！請檢查 Meta 錯誤訊息："
+             echo "🤖 Meta API 回傳：$PUBLISH_RES"
+             exit 1
+          fi
+          
           echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
           
           echo "📤 [FB] 準備依序發布 4 則留言..."
-          if [ "$FB_POST_ID" != "null" ] && [ -n "$FB_POST_ID" ]; then
-            for i in {1..4}; do
-              if [ -f "comment${i}.txt" ]; then
-                echo "📤 [FB] 發布留言 ${i}..."
-                curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$CLEAN_META_TOKEN" > /dev/null
-                sleep 5
+          for i in {1..4}; do
+            if [ -f "comment${i}.txt" ]; then
+              echo "📤 [FB] 發布留言 ${i}..."
+              # 這裡改為印出回應，以便觀察留言是否被阻擋
+              COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" \
+                   --data-urlencode message@comment${i}.txt \
+                   -d "access_token=$CLEAN_META_TOKEN")
+              
+              COMMENT_ID=$(echo $COMMENT_RES | jq -r '.id')
+              if [ "$COMMENT_ID" != "null" ] && [ -n "$COMMENT_ID" ]; then
+                 echo "✅ [FB] 留言 $i 發佈成功"
+              else
+                 echo "❌ [FB] 留言 $i 發佈失敗！Meta 回傳：$COMMENT_RES"
               fi
-            done
-            echo "✅ [FB] 留言發佈完成！"
-          else
-            echo "❌ [FB] 找不到主文 ID，跳過留言發佈。"
-          fi
+              sleep 15
+            fi
+          done
+          echo "🎉 [FB] 所有流程執行完畢！"
