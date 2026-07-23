@@ -125,6 +125,9 @@ jobs:
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布完成 ID: $POST_ID"
           
+          echo "⏳ [Threads] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
+          
           echo "📤 [Threads] 準備依序發布 3 則留言 (以串文接龍方式)..."
           CURRENT_REPLY_TARGET=$POST_ID 
           for i in {1..3}; do
@@ -221,6 +224,9 @@ jobs:
           IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
           
+          echo "⏳ [IG] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
+          
           echo "📤 [IG] 準備依序發布留言..."
           if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
             for i in {1..3}; do
@@ -293,6 +299,9 @@ jobs:
           fi
           
           echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
+          
+          echo "⏳ [FB] 等待 Meta 伺服器同步主文資料 (30 秒)..."
+          sleep 30
           
           echo "📤 [FB] 準備依序發布留言..."
           for i in {1..3}; do
