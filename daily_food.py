@@ -10,12 +10,27 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
     try:
-        # 🟢 【防呆省錢機制】：檢查是否已經有生成好的檔案
-        if os.path.exists("caption.txt") and os.path.exists("img_names.txt"):
-            print("✅ 發現既有的 caption.txt 與圖片紀錄！")
-            print("🛑 為了節省 API 費用，本次跳過呼叫 Gemini，直接使用舊有內容進行後續測試/發文。")
-            return  # 提早結束，讓 GitHub Action 直接進入發文步驟
+        # 🟢 【全自動防呆機制】：利用 GitHub Actions 的 RUN_ID 來判斷是不是「重跑」
+        current_run_id = os.environ.get("GITHUB_RUN_ID", "local_test")
+        
+        last_run_id = ""
+        # 為了不跟景點版打架，這裡改用 last_run_id_food.txt
+        if os.path.exists("last_run_id_food.txt"):
+            with open("last_run_id_food.txt", "r", encoding="utf-8") as f:
+                last_run_id = f.read().strip()
+                
+        # 如果現在的 ID 跟上次紀錄的一樣，代表你在 GitHub 後台按了 Re-run
+        if current_run_id == last_run_id and current_run_id != "local_test":
+            print(f"✅ 偵測到這是同一次任務的重跑 (Run ID: {current_run_id})")
+            print("🛑 為節省費用，跳過 Gemini 生成，直接沿用剛才的檔案進入發文步驟！")
+            return  # 提早下班，不往下執行
             
+        # 如果是新的 ID（全新的排程），就把新 ID 寫入檔案，並繼續呼叫 AI
+        with open("last_run_id_food.txt", "w", encoding="utf-8") as f:
+            f.write(current_run_id)
+            
+        print(f"🚀 偵測到全新美食任務 (Run ID: {current_run_id})，開始呼叫 Gemini...")
+
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
@@ -70,7 +85,7 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        # 🟢 【修改點】：文字模型換成更便宜的 2.5-flash
+        # 🟢 文字模型設定：依照附檔設定改回 gemini-2.5-flash
         res = client.models.generate_content(
             model='gemini-2.5-flash', 
             contents=task_prompt,
@@ -136,7 +151,6 @@ def run():
                 
             print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
             try:
-                # 這裡保持用 gemini-2.5-flash-image
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
