@@ -89,7 +89,7 @@ jobs:
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
           echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
-          for j in {1..15}; do
+          for j in {1..40}; do
             STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status')
             if [ "$STATUS" == "FINISHED" ]; then
@@ -101,7 +101,7 @@ jobs:
               echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
               exit 1
             fi
-            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/15)"
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
             sleep 10
           done
           
@@ -150,7 +150,7 @@ jobs:
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
           echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
-          for j in {1..15}; do
+          for j in {1..40}; do
             STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status_code')
             if [ "$STATUS" == "FINISHED" ]; then
@@ -161,7 +161,7 @@ jobs:
               echo "❌ [IG] 伺服器處理失敗！"
               exit 1
             fi
-            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/15)"
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
             sleep 10
           done
           
