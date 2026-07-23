@@ -10,6 +10,26 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def run():
     try:
+        # 🟢 【全自動防呆機制】：利用 GitHub Actions 的 RUN_ID 來判斷是不是「重跑」
+        current_run_id = os.environ.get("GITHUB_RUN_ID", "local_test")
+        
+        last_run_id = ""
+        if os.path.exists("last_run_id.txt"):
+            with open("last_run_id.txt", "r", encoding="utf-8") as f:
+                last_run_id = f.read().strip()
+                
+        # 如果現在的 ID 跟上次紀錄的一樣，代表你在 GitHub 後台按了 Re-run
+        if current_run_id == last_run_id and current_run_id != "local_test":
+            print(f"✅ 偵測到這是同一次任務的重跑 (Run ID: {current_run_id})")
+            print("🛑 為節省費用，跳過 Gemini 生成，直接沿用剛才的檔案進入發文步驟！")
+            return  # 提早下班，不往下執行
+            
+        # 如果是新的 ID（全新的排程），就把新 ID 寫入檔案，並繼續呼叫 AI (後續寫入檔案時會自動覆蓋)
+        with open("last_run_id.txt", "w", encoding="utf-8") as f:
+            f.write(current_run_id)
+            
+        print(f"🚀 偵測到全新任務 (Run ID: {current_run_id})，開始呼叫 Gemini...")
+
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
             
@@ -63,8 +83,9 @@ def run():
             f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
+        # 🟢 文字模型降級：使用更便宜快速的 gemini-2.5-flash-lite
         res = client.models.generate_content(
-            model='gemini-2.5-flash', 
+            model='gemini-2.5-flash-lite', 
             contents=task_prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -88,6 +109,7 @@ def run():
 
         if len(caption) > 480: caption = caption[:475] + "..."
         
+        # 覆蓋寫入主文檔案
         with open("caption.txt", "w", encoding="utf-8") as f: 
             f.write(caption)
             
@@ -108,6 +130,7 @@ def run():
             if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
             
             file_idx = (i // 2) + 1
+            # 覆蓋寫入留言檔案
             with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
                 f.write(comment_text)
 
