@@ -44,15 +44,12 @@ def run():
         ]
         themes_list = ["歷史古蹟", "文青巷弄", "自然絕景", "購物商圈", "傳統市場或夜市" ,"網美打卡", "當地人私房秘境", "浪漫夜景"]
         
-        if os.path.exists("city.txt"):
-            with open("city.txt", "r", encoding="utf-8") as f: 
-                selected_city = f.read().strip()
-            print(f"📌 發現保留的 city.txt，繼續使用城市：【{selected_city}】")
-        else:
-            selected_city = random.choice(target_cities)
-            with open("city.txt", "w", encoding="utf-8") as f:
-                f.write(selected_city)
-            print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
+        # --- 🛠️ 修正區域：移除讀取舊檔案邏輯，強制每次都重新抽籤 ---
+        selected_city = random.choice(target_cities)
+        with open("city.txt", "w", encoding="utf-8") as f:
+            f.write(selected_city)
+        print(f"🎲 隨機抽中新城市並寫入 city.txt：【{selected_city}】")
+        # -------------------------------------------------------------
                 
         themes_str = "、".join(themes_list)
         print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元主題」景點...")
