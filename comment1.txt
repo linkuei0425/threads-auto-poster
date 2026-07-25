@@ -1,7 +1,7 @@
-✨ 景點 1：瑪麗恩廣場 (Marienplatz)
-🚆 交通：搭乘S-Bahn任何線（S1-S8）或U-Bahn（U3/U6）至Marienplatz站，出口即是廣場。
-🗺️ 搜尋：Marienplatz
+✨ 景點 1：國家紀念碑 (Monumen Nasional)
+🚆 交通：搭乘TransJakarta公車至Monas站下車，步行約5分鐘即可抵達。或搭乘MRT至Bundaran HI站，轉乘TransJakarta或計程車/叫車服務前往。
+🗺️ 搜尋：Monumen Nasional
 
-✨ 景點 2：寧芬堡宮 (Nymphenburg Palace)
-🚆 交通：搭乘電車17號線（Tram 17）至Schloss Nymphenburg站，下車後步行約5分鐘即可抵達宮殿入口。
-🗺️ 搜尋：Nymphenburg Palace
+✨ 景點 2：雅加達老城區 (Kota Tua - Fatahillah Square)
+🚆 交通：搭乘Commuter Line火車至Jakarta Kota站，出站後步行約5分鐘即可到達。或搭乘TransJakarta公車至Kota站下車。
+🗺️ 搜尋：Fatahillah Square
