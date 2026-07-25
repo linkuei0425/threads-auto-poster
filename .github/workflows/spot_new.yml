@@ -55,14 +55,14 @@ jobs:
             echo "👉 正在檢查：$IMG_URL"
             
             SUCCESS=false
-            for i in {1..20}; do
+            for i in {1..40}; do
               HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
               if [ "$HTTP_STATUS" == "200" ]; then
                 echo "  ✅ 此圖片已成功上線！"
                 SUCCESS=true
                 break
               fi
-              echo "  ⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+              echo "  ⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/40)"
               sleep 15
             done
             
