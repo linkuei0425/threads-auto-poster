@@ -1,7 +1,7 @@
-✨ 景點 1：國家紀念碑 (Monumen Nasional)
-🚆 交通：搭乘TransJakarta公車至Monas站下車，步行約5分鐘即可抵達。或搭乘MRT至Bundaran HI站，轉乘TransJakarta或計程車/叫車服務前往。
-🗺️ 搜尋：Monumen Nasional
+✨ 景點 1：獨立紀念碑
+🚆 交通：搭乘雅加達捷運（MRT）南北線至 Bundaran HI 站，轉乘 TransJakarta 巴士 1A 路線至 Monas 站，下車後步行約 5 分鐘即可抵達。
+🗺️ 搜尋：Monas Jakarta
 
-✨ 景點 2：雅加達老城區 (Kota Tua - Fatahillah Square)
-🚆 交通：搭乘Commuter Line火車至Jakarta Kota站，出站後步行約5分鐘即可到達。或搭乘TransJakarta公車至Kota站下車。
-🗺️ 搜尋：Fatahillah Square
+✨ 景點 2：雅加達老城區
+🚆 交通：搭乘通勤列車（KRL Commuter Line）至 Jakarta Kota 站，出站後步行約 2 分鐘即可抵達法塔希拉廣場（Fatahillah Square）中心。
+🗺️ 搜尋：Kota Tua Jakarta
