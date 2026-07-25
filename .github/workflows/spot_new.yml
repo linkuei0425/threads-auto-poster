@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -42,12 +40,6 @@ jobs:
           git pull --rebase origin main || true
           git push
 
-      - name: Setup Cache Buster and Wait
-        run: |
-          echo "CACHE_BUSTER=$(date +%s)" >> $GITHUB_ENV
-          echo "⏳ 為了避免觸發 GitHub CDN 的「404 負面快取」，先暫停 60 秒讓伺服器背景部署..."
-          sleep 60
-
       - name: Wait for GitHub Pages to Deploy
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
@@ -55,39 +47,27 @@ jobs:
           BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
           IMG_NAMES=$(cat img_names.txt)
           IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
           
-          echo "🔍 準備檢查 ${#IMG_ARRAY[@]} 張圖片是否已全部同步至 GitHub Pages CDN..."
-          
-          for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}?v=${CACHE_BUSTER}"
-            echo "👉 正在檢查：$IMG_URL"
-            
-            SUCCESS=false
-            for i in {1..40}; do
-              HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$IMG_URL")
-              if [ "$HTTP_STATUS" == "200" ]; then
-                echo "  ✅ 此圖片已成功上線！"
-                SUCCESS=true
-                break
-              fi
-              echo "  ⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/40)"
-              sleep 15
-            done
-            
-            if [ "$SUCCESS" = false ]; then
-              echo "❌ 致命錯誤：圖片同步超時，中止流程以避免 Meta API 抓取失敗。"
-              exit 1
+          echo "🔍 正在等待首圖上線：$FIRST_IMG_URL"
+          for i in {1..20}; do
+            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$FIRST_IMG_URL")
+            if [ "$HTTP_STATUS" == "200" ]; then
+              echo "✅ 圖片已成功上線！"
+              break
             fi
+            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
+            sleep 15
           done
-          
-          echo "🎉 所有圖片均已確認上線！緩衝 10 秒後準備進入發布流程..."
           sleep 10
 
       - name: Post to Threads (Carousel + 4 Comments)
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
+          # 🛡️ 淨化 Token 隱藏的換行與空白
           CLEAN_TOKEN=$(echo -n "$TOKEN" | tr -d '\r\n ')
+          
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO=$(basename "${{ github.repository }}")
           BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
@@ -97,7 +77,7 @@ jobs:
           
           echo "📤 [Threads] 正在上傳 8 張圖片至暫存區..."
           for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}?v=${CACHE_BUSTER}"
+            IMG_URL="${BASE_URL}/${img}"
             RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$CLEAN_TOKEN")
             ID=$(echo $RES | jq -r '.id')
             if [ "$ID" != "null" ] && [ -n "$ID" ]; then
@@ -105,25 +85,27 @@ jobs:
             else
               echo "⚠️ [Threads Debug] 圖片上傳異常！Meta 回傳：$RES"
             fi
+            # 🛡️ 加入短暫延遲，避免連續上傳 8 張圖被 Meta 阻擋
             sleep 3
           done
           CHILDREN=${CHILDREN%,}
           
           if [ -z "$CHILDREN" ]; then
-            echo "❌ [Threads] 致命錯誤：沒有任何一張圖片成功上傳！"
+            echo "❌ [Threads] 致命錯誤：沒有任何一張圖片成功上傳，無法建立輪播貼文！"
             exit 1
           fi
           
           echo "📤 [Threads] 正在建立輪播主文容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$CLEAN_TOKEN")
+          echo "🔍 [Threads Debug 容器回應]: $RES_MAIN"
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
           if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then
-             echo "❌ [Threads] 致命錯誤：建立主文容器失敗！"
+             echo "❌ [Threads] 致命錯誤：建立主文容器失敗！請查看上方的 Debug 容器回應。"
              exit 1
           fi
           
-          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理..."
+          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 8 張圖片..."
           for j in {1..40}; do
             STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$CLEAN_TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status')
@@ -132,8 +114,11 @@ jobs:
               break
             fi
             if [ "$STATUS" == "ERROR" ]; then
+              ERR_MSG=$(echo $STATUS_RES | jq -r '.error_message')
+              echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
               exit 1
             fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
             sleep 10
           done
 
@@ -142,11 +127,13 @@ jobs:
           POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
           echo "✅ [Threads] 主文發布成功！ID: $POST_ID"
           
+          echo "📤 [Threads] 準備依序發布 4 則交通資訊留言..."
           for i in {1..4}; do
             if [ -f "comment${i}.txt" ]; then
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$CLEAN_TOKEN" > temp_res.json
               COMMENT_ID=$(cat temp_res.json | jq -r '.id')
               curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$CLEAN_TOKEN" > /dev/null
+              echo "✅ [Threads] 留言 $i 發布成功"
               sleep 15
             fi
           done
@@ -156,8 +143,10 @@ jobs:
           META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
         run: |
+          # 🛡️ 淨化 Token 與 ID
           CLEAN_META_TOKEN=$(echo -n "$META_TOKEN" | tr -d '\r\n ')
           CLEAN_IG_ID=$(echo -n "$IG_ID" | tr -d '\r\n ')
+          
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO=$(basename "${{ github.repository }}")
           BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
@@ -167,49 +156,66 @@ jobs:
           
           echo "📤 [IG] 正在上傳圖片至暫存區..."
           for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}?v=${CACHE_BUSTER}"
+            IMG_URL="${BASE_URL}/${img}"
             RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$CLEAN_META_TOKEN")
             ID=$(echo $RES | jq -r '.id')
             if [ "$ID" != "null" ] && [ -n "$ID" ]; then
               CHILDREN="${CHILDREN}${ID},"
+            else
+              echo "⚠️ [IG Debug] 圖片上傳異常！Meta 回傳：$RES"
             fi
             sleep 3
           done
           CHILDREN=${CHILDREN%,}
           
           if [ -z "$CHILDREN" ]; then
+            echo "❌ [IG] 致命錯誤：沒有任何一張圖片成功上傳，無法建立輪播貼文！"
             exit 1
           fi
           
+          echo "📤 [IG] 正在建立輪播主文容器..."
           RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$CLEAN_META_TOKEN")
+          echo "🔍 [IG Debug 容器回應]: $RES_MAIN"
           MAIN_ID=$(echo $RES_MAIN | jq -r '.id')
           
           if [ "$MAIN_ID" == "null" ] || [ -z "$MAIN_ID" ]; then
+             echo "❌ [IG] 致命錯誤：建立主文容器失敗！請查看上方的 Debug 容器回應。"
              exit 1
           fi
           
+          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 8 張圖片..."
           for j in {1..40}; do
             STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$CLEAN_META_TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status_code')
             if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [IG] 伺服器處理完成！準備發布！"
               break
             fi
             if [ "$STATUS" == "ERROR" ]; then
+              echo "❌ [IG] 伺服器處理失敗！"
               exit 1
             fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
             sleep 10
           done
 
+          echo "📤 [IG] 正在正式發布貼文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$CLEAN_META_TOKEN")
           IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
           
+          echo "📤 [IG] 準備依序發布 4 則留言..."
           if [ "$IG_POST_ID" != "null" ] && [ -n "$IG_POST_ID" ]; then
             for i in {1..4}; do
               if [ -f "comment${i}.txt" ]; then
+                echo "📤 [IG] 發布留言 ${i}..."
                 curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$CLEAN_META_TOKEN" > /dev/null
                 sleep 5
               fi
             done
+            echo "✅ [IG] 留言發佈完成！"
+          else
+            echo "❌ [IG] 找不到主文 ID，跳過留言發佈。"
           fi
 
       - name: Post to Facebook Page (Multi-Photo)
@@ -217,8 +223,10 @@ jobs:
           META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
         run: |
+          # 🛡️ 淨化 Token 與 ID
           CLEAN_META_TOKEN=$(echo -n "$META_TOKEN" | tr -d '\r\n ')
           CLEAN_FB_PAGE_ID=$(echo -n "$FB_PAGE_ID" | tr -d '\r\n ')
+          
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REPO=$(basename "${{ github.repository }}")
           BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
@@ -228,7 +236,7 @@ jobs:
           
           echo "📤 [FB] 正在上傳未公開的照片..."
           for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}?v=${CACHE_BUSTER}"
+            IMG_URL="${BASE_URL}/${img}"
             RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$CLEAN_META_TOKEN")
             PHOTO_ID=$(echo $RES | jq -r '.id')
             if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
@@ -238,14 +246,21 @@ jobs:
           done
           ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
           
+          echo "📤 [FB] 正在發布多圖貼文..."
           PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$CLEAN_META_TOKEN")
           FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id')
+          echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
           
+          echo "📤 [FB] 準備依序發布 4 則留言..."
           if [ "$FB_POST_ID" != "null" ] && [ -n "$FB_POST_ID" ]; then
             for i in {1..4}; do
               if [ -f "comment${i}.txt" ]; then
+                echo "📤 [FB] 發布留言 ${i}..."
                 curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$CLEAN_META_TOKEN" > /dev/null
                 sleep 5
               fi
             done
+            echo "✅ [FB] 留言發佈完成！"
+          else
+            echo "❌ [FB] 找不到主文 ID，跳過留言發佈。"
           fi
