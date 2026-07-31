@@ -29,6 +29,7 @@ jobs:
       - name: Run Script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
         run: python daily_spot.py
 
       - name: Commit to GitHub
@@ -40,27 +41,6 @@ jobs:
           git pull --rebase origin main || true
           git push
 
-      - name: Wait for GitHub Pages to Deploy
-        run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(basename "${{ github.repository }}")
-          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-          IMG_NAMES=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
-          FIRST_IMG_URL="${BASE_URL}/${IMG_ARRAY[0]}"
-          
-          echo "🔍 正在等待首圖上線：$FIRST_IMG_URL"
-          for i in {1..20}; do
-            HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}\n" "$FIRST_IMG_URL")
-            if [ "$HTTP_STATUS" == "200" ]; then
-              echo "✅ 圖片已成功上線！"
-              break
-            fi
-            echo "⏳ 尚未上線 (狀態碼: $HTTP_STATUS)... 等待 15 秒後重試 ($i/20)"
-            sleep 15
-          done
-          sleep 10
-
       - name: Post to Threads (Carousel + 4 Comments)
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
@@ -68,17 +48,13 @@ jobs:
           # 🛡️ 淨化 Token 隱藏的換行與空白
           CLEAN_TOKEN=$(echo -n "$TOKEN" | tr -d '\r\n ')
           
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(basename "${{ github.repository }}")
-          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-          IMG_NAMES=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
           CHILDREN=""
           
           echo "📤 [Threads] 正在上傳 8 張圖片至暫存區..."
-          for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}"
-            RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$CLEAN_TOKEN")
+          for img_url in "${IMG_ARRAY[@]}"; do
+            RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$CLEAN_TOKEN")
             ID=$(echo $RES | jq -r '.id')
             if [ "$ID" != "null" ] && [ -n "$ID" ]; then
               CHILDREN="${CHILDREN}${ID},"
@@ -147,17 +123,13 @@ jobs:
           CLEAN_META_TOKEN=$(echo -n "$META_TOKEN" | tr -d '\r\n ')
           CLEAN_IG_ID=$(echo -n "$IG_ID" | tr -d '\r\n ')
           
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(basename "${{ github.repository }}")
-          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-          IMG_NAMES=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
           CHILDREN=""
           
           echo "📤 [IG] 正在上傳圖片至暫存區..."
-          for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}"
-            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_IG_ID/media" -d "image_url=$IMG_URL" -d "is_carousel_item=true" -d "access_token=$CLEAN_META_TOKEN")
+          for img_url in "${IMG_ARRAY[@]}"; do
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_IG_ID/media" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$CLEAN_META_TOKEN")
             ID=$(echo $RES | jq -r '.id')
             if [ "$ID" != "null" ] && [ -n "$ID" ]; then
               CHILDREN="${CHILDREN}${ID},"
@@ -227,17 +199,13 @@ jobs:
           CLEAN_META_TOKEN=$(echo -n "$META_TOKEN" | tr -d '\r\n ')
           CLEAN_FB_PAGE_ID=$(echo -n "$FB_PAGE_ID" | tr -d '\r\n ')
           
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          REPO=$(basename "${{ github.repository }}")
-          BASE_URL="https://${OWNER}.github.io/${REPO}/images/SPOT"
-          IMG_NAMES=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_NAMES"
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
           ATTACHED_MEDIA="["
           
           echo "📤 [FB] 正在上傳未公開的照片..."
-          for img in "${IMG_ARRAY[@]}"; do
-            IMG_URL="${BASE_URL}/${img}"
-            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/photos" -d "url=$IMG_URL" -d "published=false" -d "access_token=$CLEAN_META_TOKEN")
+          for img_url in "${IMG_ARRAY[@]}"; do
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$CLEAN_FB_PAGE_ID/photos" -d "url=$img_url" -d "published=false" -d "access_token=$CLEAN_META_TOKEN")
             PHOTO_ID=$(echo $RES | jq -r '.id')
             if [ "$PHOTO_ID" != "null" ] && [ -n "$PHOTO_ID" ]; then
               ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
