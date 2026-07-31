@@ -1,126 +1,196 @@
 import os
-import random
-import requests
 import sys
 import time
+import json
+import random
+import base64
+import requests
 from google import genai
+from google.genai import types
 
-# 1. 讀取 Secrets
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-THREADS_TOKEN = os.getenv("THREADS_ACCESS_TOKEN")
-
-CITIES = [
-    {"name": "曼谷通", "topic": "曼谷按摩、考山路與泰式美食", "url": "https://linkuei0425.github.io/Bangkok/"},
-    {"name": "清邁通", "topic": "清邁古城、文青咖啡廳與大象營", "url": "https://linkuei0425.github.io/ChiangMai/"},
-    {"name": "首爾通", "topic": "首爾逛街、漢江公園與韓式燒肉", "url": "https://linkuei0425.github.io/Seoul/"},
-    {"name": "釜山通", "topic": "釜山海雲台、甘川洞文化村與豬肉湯飯", "url": "https://linkuei0425.github.io/Busan/"},
-    {"name": "沖繩通", "topic": "沖繩自駕、美麗海水族館與潛水", "url": "https://linkuei0425.github.io/Okinawa/"},
-    {"name": "新加坡通", "topic": "新加坡環球影城、金沙酒店與肉骨茶", "url": "https://linkuei0425.github.io/Singapore/"},
-    {"name": "福岡通", "topic": "福岡博多拉麵、太宰府天滿宮與屋台", "url": "https://linkuei0425.github.io/FUKUOKA/"},
-    {"name": "京・阪・神通", "topic": "京都花見小路、大阪心齋橋與環球影城", "url": "https://linkuei0425.github.io/Osaka/"},
-    {"name": "河內通", "topic": "河內三十六古街、還劍湖與越式河粉", "url": "https://kokko-travel.com/zh/hanoi/"},
-    {"name": "胡志明通", "topic": "咖啡公寓、粉紅教堂與法棍三明治", "url": "https://kokko-travel.com/zh/hochiminh/"},
-    {"name": "峴港通", "topic": "巴拿山佛手橋、美溪沙灘與海鮮大餐", "url": "https://kokko-travel.com/zh/danang/"},
-    {"name": "富國島通", "topic": "跨海纜車、珍珠樂園與絕美渡假村", "url": "https://kokko-travel.com/zh/phuquoc/"},
-    {"name": "蘇梅島通", "topic": "查汶海灘、跳島浮潛與浪漫海景", "url": "https://kokko-travel.com/zh/kohsamui/"}
-]
+IMGBB_KEY = os.getenv("IMGBB_API_KEY")
 
 def run():
+    # --- 🛡️ 防噴錢機制開始 🛡️ ---
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    if run_attempt != "1" and os.path.exists("caption.txt"):
+        print(f"♻️ 偵測到這是第 {run_attempt} 次重跑 (Re-run)！")
+        print("為了避免噴錢，將直接沿用舊有圖文檔案，跳過 Gemini API。")
+        return  # 直接結束 Python 腳本，讓 Actions 繼續拿舊檔案去嘗試發文
+    # --- 🛡️ 防噴錢機制結束 🛡️ ---
+
     try:
+        if not GEMINI_KEY:
+            raise Exception("缺少 GEMINI_API_KEY 環境變數")
+        if not IMGBB_KEY:
+            raise Exception("缺少 IMGBB_API_KEY 環境變數")
+            
         client = genai.Client(api_key=GEMINI_KEY)
-        target = random.choice(CITIES)
-
-        print(f"🎲 準備為【{target['name']}】生成「痛點開場+結尾呼籲分享」純文字行銷貼文...")
-
-        # 💡 大幅修改 Prompt：直接用痛點開場，將分享呼籲移到結尾，嚴禁用購物台語氣
-        prompt = f"""
-        你現在是「Kokko」，一個熱愛出國自由行、講話超接地氣的旅遊狂熱者。
-        你要發一篇 Threads 貼文，跟大家分享你整理的專屬【免費】旅遊APP『{target['name']}』。
-
-        📖 **本次貼文要包裝的城市亮點：** {target['topic']}
-
-        📝 **撰寫要求（請完全捨棄 AI 的官方腔調與購物台推銷語氣，用白話文寫）：**
-        1. 【直接用痛點開場（非常重要）】：文章第一段『直接』抱怨自由行的痛點，像真人在發牢騷。例如：一出機場不知怎麼搭車怕被坑、找住宿怕踩雷、排行程找路找到快跟旅伴吵架等。❌ 絕對禁止使用「吼唷、看過來、挖到寶了、大放送」這種假嗨的開場白！
-        2. 【解方與超強功能】：抱怨完後，自然帶出這款【完全免費】的 APP 是救星。必須明確提到它能一次解決：「機場與市內交通攻略、精選住宿推薦、必吃美食地圖、一鍵自排行程，還直接帶出完整的交通轉乘方式」。
-        3. 【城市亮點行銷】：用朋友推坑的語氣提一下 {target['topic']} 有多好玩，揉進內文中，讓人看了想馬上買機票。
-        4. 【留言解鎖與呼籲】：在介紹完之後（文章最後面），順理成章地說：「只要在下面留言『{target['name']}』，我就把這款神級免費 APP 的連結私訊給你！👇 順便把這篇轉發給那個每次出國都不排行程的雷隊友！」。
-        5. 【排版規定（嚴格遵守）】：段落與段落之間『必須空一行』！多用短句。❌ 絕對禁止使用成語或客套詞（如：深入探討、不可否認、為您帶來、彷彿）。善用 Emoji，絕對不要把文字擠成一團。
-        6. 【結尾規定】：留完言呼籲後自然收尾，絕對不要在正文放上任何網址！
-        7. 【字數限制】：總字數控制在 350 到 400 字左右（絕對不能超過 450 字）。
-        8. 加上標籤 #旅遊 #自由行 #{target['name']}。
-        """
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+        print("🤖 系統正在隨機抽取城市與主題...")
+        
+        target_cities = [
+            "曼谷", "清邁", "釜山", "首爾", "新加坡", "沖繩", "宮古島", "福岡", 
+            "大阪", "京都", "神戶", "東京", "宇治", "奈良", "香港", "澳門", 
+            "河內", "胡志明市", "峴港", "蘇梅島", "普吉島", "芭達雅", "富國島",
+            "吉隆坡", "濟州島", "札幌", "峇里島", "雅加達", "馬尼拉", "宿霧", 
+            "檳城", "北京", "上海", "廣州", "深圳", "成都", "新德里", "孟買",
+            "巴黎", "倫敦", "羅馬", "馬德里", "巴塞隆納", "阿姆斯特丹", "柏林", 
+            "米蘭", "維也納", "慕尼黑", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
+            "雅典", "蘇黎世", "日內瓦", "哥本哈根", "斯德哥爾摩", "奧斯陸", "赫爾辛基", 
+            "里斯本", "波多", "都柏林", "愛丁堡", "布魯塞爾", "法蘭克福", "華沙", 
+            "克拉科夫", "尼斯", "里昂", "塞維亞", "瓦倫西亞", "拿坡里", "杜布羅夫尼克", 
+            "斯普利特", "薩爾茨堡", "雷克雅維克", "伊斯坦堡", "安塔利亞", "紐約", 
+            "洛杉磯", "舊金山", "芝加哥", "拉斯維加斯", "邁阿密", "奧蘭多", "華盛頓特區", 
+            "多倫多", "溫哥華", "墨西哥城", "坎昆", "里約熱內盧", "聖保羅", 
+            "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
+            "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
+        ]
+        themes_list = ["必吃在地小吃", "網美打卡咖啡廳", "傳統老店或夜市美食", "高質感特色餐廳", "隱藏版深夜食堂", "人氣排隊甜點"]
+        
+        # 為了跟景點連戲，讀取由景點腳本保留的 city.txt
+        if os.path.exists("city.txt"):
+            with open("city.txt", "r", encoding="utf-8") as f: 
+                selected_city = f.read().strip()
+            print(f"📌 發現保留的 city.txt，繼續使用城市：【{selected_city}】")
+        else:
+            selected_city = random.choice(target_cities)
+            with open("city.txt", "w", encoding="utf-8") as f:
+                f.write(selected_city)
+            print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
+                
+        themes_str = "、".join(themes_list)
+        print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元美食主題」...")
+        
+        task_prompt = (
+            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
+            f"1. 請針對【{selected_city}】這個城市，挑選 6 個『不同類型』的真實存在知名餐廳或在地美食（請勿介紹純景點）。\n"
+            f"   💡 【重要】：這 6 間店必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 6 間都是同一種類型，越豐富越好！\n"
+            f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
+            f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業美食家，用輕鬆口吻簡單盤點這 6 間店。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細資訊』。這裡『絕對不要』寫出地址或營業時間,也不要用副詞。480字內。\n"
+            f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
+            f"- restaurants: (這是一個包含 6 個物件的陣列 Array，每個物件代表一間店，需包含以下屬性)\n"
+            f"  - name: (餐廳名稱) 餐廳的精準名稱。\n"
+            f"  - image_prompt: (英文咒語) 請根據該餐廳或招牌菜色的具體畫面撰寫咒語。為了打破 AI 塗抹感並模擬真實手機攝影，『強制』加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 不要使用任何 master piece, 8k 等字眼。\n"
+            f"  - info: (地址與營業時間) 詳細的地址、大約的營業時間或必點推薦。越詳細越好。\n"
+            f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這間店的關鍵字。\n\n"
+            f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
         )
         
-        main_text = response.text.strip()
+        res = client.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=task_prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.8
+            )
+        )
         
-        # 💡 防呆機制：確保字數不會爆炸
-        if len(main_text) > 480:
-            print(f"⚠️ 警告：主文字數太長 ({len(main_text)} 字)，已觸發自動截斷！")
-            main_text = main_text[:465] + f"...\n\n(留言『{target['name']}』免費拿連結👇)"
-
-        # 📤 1. 建立純文字主貼文
-        print("📤 1. 正在建立主貼文容器 (純文字)...")
-        res_main = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-            'media_type': 'TEXT', 
-            'text': main_text, 
-            'access_token': THREADS_TOKEN
-        }).json()
-        
-        if 'id' in res_main:
-            # 發布主貼文
-            publish_main = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
-                'creation_id': res_main['id'], 
-                'access_token': THREADS_TOKEN
-            }).json()
-            main_post_id = publish_main.get('id')
-            
-            if not main_post_id:
-                print(f"❌ 主貼文發布失敗：{publish_main}")
-                sys.exit(1)
-                
-            print(f"✅ 主貼文發布成功！貼文 ID: {main_post_id}")
-            
-            # ⏳ 加長煞車時間
-            print("⏳ 等待 15 秒鐘，讓 Meta 伺服器建檔你的貼文...")
-            time.sleep(15)
-            
-            # 📤 2. 建立留言容器
-            print("📤 2. 正在建立留言區...")
-            reply_text = f"👍 留言給我，我就會把【{target['name']}】的免費 APP 連結傳給你囉！（記得要能接收陌生訊息）"
-            
-            res_reply = requests.post("https://graph.threads.net/v1.0/me/threads", params={
-                'media_type': 'TEXT', 
-                'text': reply_text, 
-                'reply_to_id': main_post_id, 
-                'access_token': THREADS_TOKEN
-            }).json()
-            
-            if 'id' in res_reply:
-                print("⏳ 留言容器已建立，等待 5 秒鐘進行最終發布...")
-                time.sleep(5) 
-                
-                # 發布留言
-                publish_reply = requests.post("https://graph.threads.net/v1.0/me/threads_publish", params={
-                    'creation_id': res_reply['id'], 
-                    'access_token': THREADS_TOKEN
-                }).json()
-                
-                if 'id' in publish_reply:
-                    print(f"🎉 留言發布成功！排版完美結束！")
-                else:
-                    print(f"❌ 留言【發布】失敗：{publish_reply}")
-            else:
-                print(f"❌ 留言【建立】失敗：{res_reply}")
-        else:
-            print(f"❌ 建立主貼文失敗：{res_main}")
+        try:
+            data = json.loads(res.text)
+        except json.JSONDecodeError:
+            print("⚠️ 警告：AI 輸出的不是有效的 JSON！原始輸出如下：")
+            print(res.text)
             sys.exit(1)
+            
+        raw_caption = data.get("caption", "無法生成主文")
+        caption = raw_caption.replace("\\n", "\n") 
+        restaurants = data.get("restaurants", [])
+        
+        if len(restaurants) < 6:
+            print(f"⚠️ 警告：AI 只有生成 {len(restaurants)} 間餐廳 (預期 6 間)。")
+
+        if len(caption) > 480: caption = caption[:475] + "..."
+        
+        with open("caption.txt", "w", encoding="utf-8") as f: 
+            f.write(caption)
+            
+        print(f"📝 正在建立留言檔 (每 2 間餐廳合併為 1 則)...")
+        # 合併留言邏輯：每 2 間店寫入一個 txt 檔案
+        for i in range(0, len(restaurants), 2):
+            chunk = restaurants[i:i+2]
+            comment_text = ""
+            for j, shop in enumerate(chunk):
+                idx = i + j + 1
+                name = shop.get("name", "未知餐廳")
+                info = shop.get("info", "未知資訊")
+                keyword = shop.get("google_maps_keyword", "未知關鍵字")
+                
+                comment_text += f"✨ 美食 {idx}：{name}\n📍 資訊：{info}\n🗺️ 搜尋：{keyword}\n\n"
+            
+            comment_text = comment_text.strip()
+            if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
+            
+            file_idx = (i // 2) + 1
+            with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
+                f.write(comment_text)
+
+        # 注意：美食圖片存入 images/food
+        img_dir = "images/food"
+        if os.path.exists(img_dir) and not os.path.isdir(img_dir):
+            os.remove(img_dir)
+        os.makedirs(img_dir, exist_ok=True)
+        
+        img_urls = []
+        
+        for i, shop in enumerate(restaurants):
+            image_prompt = shop.get("image_prompt")
+            name = shop.get("name", "未知餐廳")
+            if not image_prompt:
+                print(f"⚠️ {name} 沒有 image_prompt，跳過生圖。")
+                continue
+                
+            print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
+            try:
+                img_res = client.models.generate_content(
+                    model='gemini-2.5-flash-image',
+                    contents=image_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE"],
+                        image_config=types.ImageConfig(aspect_ratio="9:16")
+                    )
+                )
+                
+                img_name = f"food_{int(time.time())}_{i}.jpg"
+                local_img_path = f"{img_dir}/{img_name}"
+                
+                for part in img_res.parts:
+                    if part.inline_data:
+                        part.as_image().save(local_img_path)
+                        
+                        # 🚀 上傳至 ImgBB
+                        with open(local_img_path, "rb") as file:
+                            b64_image = base64.b64encode(file.read()).decode('utf-8')
+                        
+                        imgbb_res = requests.post(
+                            "https://api.imgbb.com/1/upload",
+                            data={"key": IMGBB_KEY, "image": b64_image}
+                        )
+                        imgbb_data = imgbb_res.json()
+                        
+                        if imgbb_res.status_code == 200 and imgbb_data.get("success"):
+                            uploaded_url = imgbb_data["data"]["url"]
+                            print(f"✅ 成功上傳至 ImgBB: {uploaded_url}")
+                            img_urls.append(uploaded_url)
+                        else:
+                            print(f"❌ ImgBB 上傳失敗: {imgbb_res.text}")
+                        break
+                        
+                time.sleep(5)
+                
+            except Exception as e:
+                print(f"💥 生成/上傳 {name} 圖片時發生錯誤：{e}")
+                
+        if img_urls:
+            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
+            
+        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
+            
+        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
 
     except Exception as e:
-        print(f"💥 發生錯誤：{e}")
+        print(f"💥 發生嚴重錯誤：{e}")
         sys.exit(1)
 
 if __name__ == "__main__":
