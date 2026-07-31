@@ -3,10 +3,13 @@ import sys
 import time
 import json
 import random
+import base64
+import requests
 from google import genai
 from google.genai import types
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+IMGBB_KEY = os.getenv("IMGBB_API_KEY")
 
 def run():
     # --- 🛡️ 防噴錢機制開始 🛡️ ---
@@ -20,6 +23,8 @@ def run():
     try:
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
+        if not IMGBB_KEY:
+            raise Exception("缺少 IMGBB_API_KEY 環境變數")
             
         client = genai.Client(api_key=GEMINI_KEY)
         
@@ -44,12 +49,15 @@ def run():
         ]
         themes_list = ["歷史古蹟", "文青巷弄", "自然絕景", "購物商圈", "傳統市場或夜市" ,"網美打卡", "當地人私房秘境", "浪漫夜景"]
         
-        # --- 🛠️ 修正區域：移除讀取舊檔案邏輯，強制每次都重新抽籤 ---
-        selected_city = random.choice(target_cities)
-        with open("city.txt", "w", encoding="utf-8") as f:
-            f.write(selected_city)
-        print(f"🎲 隨機抽中新城市並寫入 city.txt：【{selected_city}】")
-        # -------------------------------------------------------------
+        if os.path.exists("city.txt"):
+            with open("city.txt", "r", encoding="utf-8") as f: 
+                selected_city = f.read().strip()
+            print(f"📌 發現保留的 city.txt，繼續使用城市：【{selected_city}】")
+        else:
+            selected_city = random.choice(target_cities)
+            with open("city.txt", "w", encoding="utf-8") as f:
+                f.write(selected_city)
+            print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
                 
         themes_str = "、".join(themes_list)
         print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元主題」景點...")
@@ -122,7 +130,7 @@ def run():
             os.remove(img_dir)
         os.makedirs(img_dir, exist_ok=True)
         
-        img_names = []
+        img_urls = []
         
         for i, spot in enumerate(spots):
             image_prompt = spot.get("image_prompt")
@@ -148,20 +156,36 @@ def run():
                 for part in img_res.parts:
                     if part.inline_data:
                         part.as_image().save(local_img_path)
-                        img_names.append(img_name)
+                        
+                        # 🚀 上傳至 ImgBB
+                        with open(local_img_path, "rb") as file:
+                            b64_image = base64.b64encode(file.read()).decode('utf-8')
+                        
+                        imgbb_res = requests.post(
+                            "https://api.imgbb.com/1/upload",
+                            data={"key": IMGBB_KEY, "image": b64_image}
+                        )
+                        imgbb_data = imgbb_res.json()
+                        
+                        if imgbb_res.status_code == 200 and imgbb_data.get("success"):
+                            uploaded_url = imgbb_data["data"]["url"]
+                            print(f"✅ 成功上傳至 ImgBB: {uploaded_url}")
+                            img_urls.append(uploaded_url)
+                        else:
+                            print(f"❌ ImgBB 上傳失敗: {imgbb_res.text}")
                         break
                         
                 time.sleep(5)
                 
             except Exception as e:
-                print(f"💥 生成 {spot_name} 圖片時發生錯誤：{e}")
+                print(f"💥 生成/上傳 {spot_name} 圖片時發生錯誤：{e}")
                 
-        if img_names:
-            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
+        if img_urls:
+            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
             
-        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
+        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
             
-        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
+        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
 
     except Exception as e:
         print(f"💥 發生嚴重錯誤：{e}")
