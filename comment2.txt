@@ -1,7 +1,11 @@
-✨ 景點 3：天神地下街
-🚆 交通：地下街直接連接地鐵空港線（Kuko Line）和七隈線（Nanakuma Line）的天神站（Tenjin Station）以及西鐵天神大牟田線（Nishitetsu Tenjin Omuta Line）的西鐵福岡（天神）站（Nishitetsu Fukuoka (Tenjin) Station）。從任何出口進入天神地區，即可輕鬆找到入口。
-🗺️ 搜尋：天神地下街
-
-✨ 景點 4：大濠公園
-🚆 交通：搭乘地鐵空港線（Kuko Line）至大濠公園站（Ohorikoen Station）。從2號或3號出口出站，步行約1分鐘即可抵達公園入口。
+✨ 景點 3：大濠公園
+🚆 交通：搭乘福岡市營地下鐵空港線（Fukuoka City Subway Kuko Line）至大濠公園站（Ohori Koen Station）。
+從2號或5號出口出站，步行約1-2分鐘即可抵達公園入口。
 🗺️ 搜尋：大濠公園
+
+✨ 景點 4：福岡塔
+🚆 交通：從JR博多站（JR Hakata Station）出發：
+在博多巴士總站（Hakata Bus Terminal）搭乘西鐵巴士306號，至「福岡塔南口」站（Fukuoka Tower Minamiguchi）或「福岡塔」站（Fukuoka Tower），車程約20-25分鐘。
+從福岡市營地下鐵西新站（Nishijin Station）出發：
+從1號出口出站，步行約15-20分鐘即可抵達。
+🗺️ 搜尋：福岡タワー
