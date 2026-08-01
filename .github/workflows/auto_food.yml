@@ -1,249 +1,249 @@
 name: "🍴 餐廳自動發布排程 (6店3留言)"
 on:
-workflow_dispatch: {}
-schedule:
-- cron: '0 10 * * 2,6'
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 10 * * 2,6'
 concurrency:
-group: "auto-poster-queue"
-cancel-in-progress: false
+  group: "auto-poster-queue"
+  cancel-in-progress: false
 jobs:
-build_and_post:
-runs-on: ubuntu-latest
-permissions:
-contents: write
-steps:
-- name: Checkout Repository
-uses: actions/checkout@v4
+  build_and_post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-  - name: Install dependencies
-    run: pip install google-genai requests pillow
+      - name: Install dependencies
+        run: pip install google-genai requests pillow
 
-  - name: Run AI Script
-    env:
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
-    run: python daily_food.py
+      - name: Run AI Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+        run: python daily_food.py
 
-  - name: Commit to GitHub
-    run: |
-      git config --global user.name "github-actions[bot]"
-      git config --global user.email "github-actions[bot]@users.noreply.github.com"
-      git add .
-      git commit -m "Auto Update Food Posts (6 Carousel Images, 3 Comments)" || echo "No changes"
-      git pull --rebase origin main || true
-      git push
+      - name: Commit to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Auto Update Food Posts (6 Carousel Images, 3 Comments)" || echo "No changes"
+          git pull --rebase origin main || true
+          git push
 
-  - name: Post to Threads
-    env:
-      TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
-    run: |
-      IMG_URLS=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
-      CHILDREN=""
-      
-      echo "📤 [Threads] 正在上傳 6 張圖片至暫存區..."
-      for img_url in "${IMG_ARRAY[@]}"; do
-        echo "上傳圖片: $img_url"
-        RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$TOKEN")
-        echo "API 回應: $RES"
-        ID=$(echo$RES | jq -r '.id // empty')
-        if [ -n "$ID" ]; then
-          CHILDREN="${CHILDREN}${ID},"
-        else
-          echo "❌ 獲取圖片 ID 失敗！"
-        fi
-      done
-      CHILDREN=${CHILDREN%,}
-      
-      if [ -z "$CHILDREN" ]; then
-        echo "❌ [Threads] 沒有成功上傳任何圖片，終止發布。"
-        exit 1
-      fi
-      
-      sleep 5
-      echo "📤 [Threads] 正在建立輪播主文容器..."
-      RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
-      echo "API 回應: $RES_MAIN"
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id // empty')
-      
-      if [ -z "$MAIN_ID" ]; then
-         echo "❌ [Threads] 建立主文容器失敗！"
-         exit 1
-      fi
-      
-      echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
-      for j in {1..40}; do
-        STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
-        STATUS=$(echo$STATUS_RES | jq -r '.status // empty')
-        if [ "$STATUS" == "FINISHED" ]; then
-          echo "✅ [Threads] 伺服器處理完成！準備發布！"
-          break
-        fi
-        if [ "$STATUS" == "ERROR" ]; then
-          ERR_MSG=$(echo$STATUS_RES | jq -r '.error_message')
-          echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
-          exit 1
-        fi
-        echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
-        sleep 10
-      done
-      
-      echo "📤 [Threads] 正在正式發布貼文..."
-      PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
-      echo "API 回應: $PUBLISH_RES"
-      POST_ID=$(echo$PUBLISH_RES | jq -r '.id // empty')
-      
-      if [ -n "$POST_ID" ]; then
-         echo "✅ [Threads] 主文發布完成 ID: $POST_ID"
-      else
-         echo "❌ [Threads] 發布貼文失敗！"
-         exit 1
-      fi
-      
-      echo "📤 [Threads] 準備依序發布 3 則留言..."
-      for i in {1..3}; do
-        if [ -f "comment${i}.txt" ]; then
-          echo "📤 發布留言 ${i}..."
-          curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
-          C_ID=$(cat temp_res.json | jq -r '.id // empty')
-          if [ -n "$C_ID" ]; then
-              curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C_ID&access_token=$TOKEN" > /dev/null
-              echo "✅ 留言 ${i} 發布成功"
+      - name: Post to Threads
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
+          CHILDREN=""
+          
+          echo "📤 [Threads] 正在上傳 6 張圖片至暫存區..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$TOKEN")
+            echo "API 回應: $RES"
+            ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            else
+              echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          if [ -z "$CHILDREN" ]; then
+            echo "❌ [Threads] 沒有成功上傳任何圖片，終止發布。"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 [Threads] 正在建立輪播主文容器..."
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
+          echo "API 回應: $RES_MAIN"
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id // empty')
+          
+          if [ -z "$MAIN_ID" ]; then
+             echo "❌ [Threads] 建立主文容器失敗！"
+             exit 1
+          fi
+          
+          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
+          for j in {1..20}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status // empty')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [Threads] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              ERR_MSG=$(echo $STATUS_RES | jq -r '.error_message')
+              echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/20)"
+            sleep 10
+          done
+          
+          echo "📤 [Threads] 正在正式發布貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$POST_ID" ]; then
+             echo "✅ [Threads] 主文發布完成 ID: $POST_ID"
           else
-              echo "❌ 建立留言 ${i} 容器失敗，回應: $(cat temp_res.json)"
+             echo "❌ [Threads] 發布貼文失敗！"
+             exit 1
           fi
-          sleep 15
-        fi
-      done
+          
+          echo "📤 [Threads] 準備依序發布 3 則留言..."
+          for i in {1..3}; do
+            if [ -f "comment${i}.txt" ]; then
+              echo "📤 發布留言 ${i}..."
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
+              C_ID=$(cat temp_res.json | jq -r '.id // empty')
+              if [ -n "$C_ID" ]; then
+                  curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C_ID&access_token=$TOKEN" > /dev/null
+                  echo "✅ 留言 ${i} 發布成功"
+              else
+                  echo "❌ 建立留言 ${i} 容器失敗，回應: $(cat temp_res.json)"
+              fi
+              sleep 15
+            fi
+          done
 
-  - name: Post to Instagram (Carousel)
-    env:
-      META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-      IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
-    run: |
-      IMG_URLS=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
-      CHILDREN=""
-      
-      echo "📤 [IG] 正在上傳 6 張圖片至暫存區..."
-      for img_url in "${IMG_ARRAY[@]}"; do
-        echo "上傳圖片: $img_url"
-        RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
-        echo "API 回應: $RES"
-        ID=$(echo$RES | jq -r '.id // empty')
-        if [ -n "$ID" ]; then
-          CHILDREN="${CHILDREN}${ID},"
-        else
-           echo "❌ 獲取圖片 ID 失敗！"
-        fi
-      done
-      CHILDREN=${CHILDREN%,}
-      
-      if [ -z "$CHILDREN" ]; then
-        echo "❌ [IG] 沒有成功上傳任何圖片，終止發布。"
-        exit 1
-      fi
-      
-      sleep 5
-      echo "📤 [IG] 正在建立輪播主文容器..."
-      RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
-      echo "API 回應: $RES_MAIN"
-      MAIN_ID=$(echo$RES_MAIN | jq -r '.id // empty')
-      
-      if [ -z "$MAIN_ID" ]; then
-         echo "❌ [IG] 建立主文容器失敗！"
-         exit 1
-      fi
-      
-      echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
-      for j in {1..40}; do
-        STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
-        STATUS=$(echo$STATUS_RES | jq -r '.status_code // empty')
-        if [ "$STATUS" == "FINISHED" ]; then
-          echo "✅ [IG] 伺服器處理完成！準備發布！"
-          break
-        fi
-        if [ "$STATUS" == "ERROR" ]; then
-          echo "❌ [IG] 伺服器處理失敗！回應: $STATUS_RES"
-          exit 1
-        fi
-        echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/40)"
-        sleep 10
-      done
-      
-      echo "📤 [IG] 正在正式發布貼文..."
-      PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
-      echo "API 回應: $PUBLISH_RES"
-      IG_POST_ID=$(echo$PUBLISH_RES | jq -r '.id // empty')
-      
-      if [ -n "$IG_POST_ID" ]; then
-        echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
-        echo "📤 [IG] 準備依序發布留言..."
-        for i in {1..3}; do
-          if [ -f "comment${i}.txt" ]; then
-            echo "📤 [IG] 發布留言 ${i}..."
-            COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
-            echo "API 回應: $COMMENT_RES"
-            sleep 15
+      - name: Post to Instagram (Carousel)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
+        run: |
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
+          CHILDREN=""
+          
+          echo "📤 [IG] 正在上傳 6 張圖片至暫存區..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
+            echo "API 回應: $RES"
+            ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            else
+               echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          if [ -z "$CHILDREN" ]; then
+            echo "❌ [IG] 沒有成功上傳任何圖片，終止發布。"
+            exit 1
           fi
-        done
-        echo "✅ [IG] 留言發佈完成！"
-      else
-        echo "❌ [IG] 發布貼文失敗，找不到主文 ID。"
-        exit 1
-      fi
+          
+          sleep 5
+          echo "📤 [IG] 正在建立輪播主文容器..."
+          RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
+          echo "API 回應: $RES_MAIN"
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id // empty')
+          
+          if [ -z "$MAIN_ID" ]; then
+             echo "❌ [IG] 建立主文容器失敗！"
+             exit 1
+          fi
+          
+          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
+          for j in {1..20}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status_code // empty')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [IG] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              echo "❌ [IG] 伺服器處理失敗！回應: $STATUS_RES"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/20)"
+            sleep 10
+          done
+          
+          echo "📤 [IG] 正在正式發布貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$IG_POST_ID" ]; then
+            echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
+            echo "📤 [IG] 準備依序發布留言..."
+            for i in {1..3}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [IG] 發布留言 ${i}..."
+                COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
+                echo "API 回應: $COMMENT_RES"
+                sleep 15
+              fi
+            done
+            echo "✅ [IG] 留言發佈完成！"
+          else
+            echo "❌ [IG] 發布貼文失敗，找不到主文 ID。"
+            exit 1
+          fi
 
-  - name: Post to Facebook Page (Multi-Photo)
-    env:
-      META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
-      FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
-    run: |
-      IMG_URLS=$(cat img_names.txt)
-      IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
-      ATTACHED_MEDIA="["
-      
-      echo "📤 [FB] 正在上傳未公開的照片..."
-      for img_url in "${IMG_ARRAY[@]}"; do
-        echo "上傳圖片: $img_url"
-        RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$img_url" -d "published=false" -d "access_token=$META_TOKEN")
-        echo "API 回應: $RES"
-        PHOTO_ID=$(echo$RES | jq -r '.id // empty')
-        if [ -n "$PHOTO_ID" ]; then
-          ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
-        else
-          echo "❌ 獲取圖片 ID 失敗！"
-        fi
-      done
-      ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
-      
-      if [ "$ATTACHED_MEDIA" == "]" ]; then
-         echo "❌ [FB] 沒有成功上傳任何圖片，終止發布。"
-         exit 1
-      fi
-      
-      echo "📤 [FB] 正在發布多圖貼文..."
-      PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN")
-      echo "API 回應: $PUBLISH_RES"
-      FB_POST_ID=$(echo$PUBLISH_RES | jq -r '.id // empty')
-      
-      if [ -n "$FB_POST_ID" ]; then
-        echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
-        echo "📤 [FB] 準備依序發布留言..."
-        for i in {1..3}; do
-          if [ -f "comment${i}.txt" ]; then
-            echo "📤 [FB] 發布留言 ${i}..."
-            COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
-            echo "API 回應: $COMMENT_RES"
-            sleep 15
+      - name: Post to Facebook Page (Multi-Photo)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+        run: |
+          IMG_URLS=$(cat img_names.txt)
+          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
+          ATTACHED_MEDIA="["
+          
+          echo "📤 [FB] 正在上傳未公開的照片..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$img_url" -d "published=false" -d "access_token=$META_TOKEN")
+            echo "API 回應: $RES"
+            PHOTO_ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$PHOTO_ID" ]; then
+              ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
+            else
+              echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
+          
+          if [ "$ATTACHED_MEDIA" == "]" ]; then
+             echo "❌ [FB] 沒有成功上傳任何圖片，終止發布。"
+             exit 1
           fi
-        done
-        echo "✅ [FB] 留言發佈完成！"
-      else
-        echo "❌ [FB] 發布貼文失敗，找不到主文 ID。"
-        exit 1
-      fi
+          
+          echo "📤 [FB] 正在發布多圖貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$FB_POST_ID" ]; then
+            echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
+            echo "📤 [FB] 準備依序發布留言..."
+            for i in {1..3}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [FB] 發布留言 ${i}..."
+                COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
+                echo "API 回應: $COMMENT_RES"
+                sleep 15
+              fi
+            done
+            echo "✅ [FB] 留言發佈完成！"
+          else
+            echo "❌ [FB] 發布貼文失敗，找不到主文 ID。"
+            exit 1
+          fi
