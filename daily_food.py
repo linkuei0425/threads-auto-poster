@@ -38,7 +38,7 @@ def run():
             "吉隆坡", "濟州島", "札幌", "峇里島", "雅加達", "馬尼拉", "宿霧", 
             "檳城", "北京", "上海", "廣州", "深圳", "成都", "新德里", "孟買",
             "巴黎", "倫敦", "羅馬", "馬德里", "巴塞隆納", "阿姆斯特丹", "柏林", 
-            "米蘭", "維也納", "慕尼生", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
+            "米蘭", "維也納", "慕尼黑", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
             "雅典", "蘇黎世", "日內瓦", "哥本哈根", "斯德哥爾摩", "奧斯陸", "赫爾辛基", 
             "里斯本", "波多", "都柏林", "愛丁堡", "布魯塞爾", "法蘭克福", "華沙", 
             "克拉科夫", "尼斯", "里昂", "塞維亞", "瓦倫西亞", "拿坡里", "杜布羅夫尼克", 
@@ -102,7 +102,8 @@ def run():
         if len(restaurants) < 6:
             print(f"⚠️ 警告：AI 只有生成 {len(restaurants)} 間餐廳 (預期 6 間)。")
 
-        if len(caption) > 480: caption = caption[:475] + "..."
+        if len(caption) > 480: 
+            caption = caption[:475] + "..."
         
         with open("caption.txt", "w", encoding="utf-8") as f: 
             f.write(caption)
@@ -121,7 +122,8 @@ def run():
                 comment_text += f"✨ 美食 {idx}：{name}\n📍 資訊：{info}\n🗺️ 搜尋：{keyword}\n\n"
             
             comment_text = comment_text.strip()
-            if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
+            if len(comment_text) > 480: 
+                comment_text = comment_text[:475] + "..."
             
             file_idx = (i // 2) + 1
             with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
@@ -132,15 +134,17 @@ def run():
         for i, shop in enumerate(restaurants):
             image_prompt = shop.get("image_prompt")
             name = shop.get("name", "未知餐廳")
+            
             if not image_prompt:
                 print(f"⚠️ {name} 沒有 image_prompt，跳過生圖。")
                 continue
                 
             print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
+            
             try:
-                # 🛑 修正點 1: Gemini 2.5 原生支援圖片生成，模型名稱直接用 gemini-2.5-flash
+                # ✅ 正確使用支援 aspect_ratio 的 gemini-2.5-flash-image 模型
                 img_res = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.5-flash-image',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
@@ -174,13 +178,16 @@ def run():
             except Exception as e:
                 print(f"💥 生成/上傳 {name} 圖片時發生錯誤：{e}")
                 
-        # 🛑 修正點 2: 防呆機制，如果全部圖片都失敗，直接終止腳本，不要往後執行
+        # 防呆機制：如果全部圖片都失敗，直接終止腳本，不要往後執行
         if not img_urls:
             print("\n❌ 錯誤：所有圖片生成或上傳皆失敗！無法建立 img_names.txt，中斷執行。")
             sys.exit(1)
             
-        with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
-        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
+        with open("img_name.txt", "w", encoding="utf-8") as f: 
+            f.write(img_urls[0])
+            
+        with open("img_names.txt", "w", encoding="utf-8") as f: 
+            f.write(",".join(img_urls))
             
         print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
 
