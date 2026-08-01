@@ -38,7 +38,7 @@ def run():
             "吉隆坡", "濟州島", "札幌", "峇里島", "雅加達", "馬尼拉", "宿霧", 
             "檳城", "北京", "上海", "廣州", "深圳", "成都", "新德里", "孟買",
             "巴黎", "倫敦", "羅馬", "馬德里", "巴塞隆納", "阿姆斯特丹", "柏林", 
-            "米蘭", "維也納", "慕尼黑", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
+            "米蘭", "維也納", "慕尼生", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
             "雅典", "蘇黎世", "日內瓦", "哥本哈根", "斯德哥爾摩", "奧斯陸", "赫爾辛基", 
             "里斯本", "波多", "都柏林", "愛丁堡", "布魯塞爾", "法蘭克福", "華沙", 
             "克拉科夫", "尼斯", "里昂", "塞維亞", "瓦倫西亞", "拿坡里", "杜布羅夫尼克", 
@@ -67,7 +67,7 @@ def run():
         task_prompt = (
             f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
             f"1. 請針對【{selected_city}】這個城市，挑選 6 個『不同類型』的真實存在知名餐廳或在地美食（請勿介紹純景點）。\n"
-            f"   💡 【重要】：這 6 間店必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 6 間都是同一種類型，越豐富越好！\n"
+            f"  💡 【重要】：這 6 間店必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 6 間都是同一種類型，越豐富越好！\n"
             f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
             f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業美食家，用輕鬆口吻簡單盤點這 6 間店。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細資訊』。這裡『絕對不要』寫出地址或營業時間,也不要用副詞。480字內。\n"
             f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
@@ -138,8 +138,9 @@ def run():
                 
             print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
             try:
+                # 🛑 修正點 1: Gemini 2.5 原生支援圖片生成，模型名稱直接用 gemini-2.5-flash
                 img_res = client.models.generate_content(
-                    model='gemini-2.5-flash-image',
+                    model='gemini-2.5-flash',
                     contents=image_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE"],
@@ -148,8 +149,8 @@ def run():
                 )
                 
                 for part in img_res.parts:
-                    if part.inline_data:
-                        # 🚀 將圖片轉為記憶體中的 Bytes，直接上傳至 ImgBB，不儲存在本機端
+                    # 確保圖片資源有成功獲取
+                    if getattr(part, 'inline_data', None) or getattr(part, 'as_image', None):
                         img_byte_arr = io.BytesIO()
                         part.as_image().save(img_byte_arr, format='JPEG')
                         b64_image = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
@@ -173,9 +174,12 @@ def run():
             except Exception as e:
                 print(f"💥 生成/上傳 {name} 圖片時發生錯誤：{e}")
                 
-        if img_urls:
-            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
+        # 🛑 修正點 2: 防呆機制，如果全部圖片都失敗，直接終止腳本，不要往後執行
+        if not img_urls:
+            print("\n❌ 錯誤：所有圖片生成或上傳皆失敗！無法建立 img_names.txt，中斷執行。")
+            sys.exit(1)
             
+        with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
         with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
             
         print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
