@@ -5,6 +5,8 @@ import json
 import random
 import base64
 import requests
+import io
+from PIL import Image
 from google import genai
 from google.genai import types
 
@@ -152,8 +154,20 @@ def run():
                 
                 for part in img_res.parts:
                     if part.inline_data:
-                        # 🚀 修正：直接抓取 API 回傳的圖片原始二進位資料，避開 as_image().save() 的參數問題
-                        b64_image = base64.b64encode(part.inline_data.data).decode('utf-8')
+                        # 🚀 修正：透過 PIL 將圖片強制轉換為標準 JPEG，避免 Meta API 解析 PNG 失敗
+                        raw_bytes = part.inline_data.data
+                        img = Image.open(io.BytesIO(raw_bytes))
+                        
+                        # 確保轉換為 RGB 模式 (去除透明通道)，這是存成 JPEG 的必備條件
+                        if img.mode in ("RGBA", "P"):
+                            img = img.convert("RGB")
+                            
+                        # 存入記憶體並指定為 JPEG 格式
+                        jpeg_io = io.BytesIO()
+                        img.save(jpeg_io, format="JPEG", quality=90)
+                        
+                        # 將標準 JPEG 轉換為 Base64 準備上傳
+                        b64_image = base64.b64encode(jpeg_io.getvalue()).decode('utf-8')
                         
                         imgbb_res = requests.post(
                             "https://api.imgbb.com/1/upload",
