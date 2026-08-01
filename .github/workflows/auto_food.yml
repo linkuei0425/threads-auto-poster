@@ -1,192 +1,273 @@
-import os
-import sys
-import time
-import json
-import random
-import base64
-import requests
-import io
-from google import genai
-from google.genai import types
+name: "🍴 餐廳自動發布排程 (6店3留言)"
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 10 * * 2,6'
+concurrency:
+  group: "auto-poster-queue"
+  cancel-in-progress: false
+jobs:
+  build_and_post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-IMGBB_KEY = os.getenv("IMGBB_API_KEY")
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-def run():
-    # --- 🛡️ 防噴錢機制開始 🛡️ ---
-    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-    if run_attempt != "1" and os.path.exists("caption.txt"):
-        print(f"♻️ 偵測到這是第 {run_attempt} 次重跑 (Re-run)！")
-        print("為了避免噴錢，將直接沿用舊有圖文檔案，跳過 Gemini API。")
-        return  # 直接結束 Python 腳本，讓 Actions 繼續拿舊檔案去嘗試發文
-    # --- 🛡️ 防噴錢機制結束 🛡️ ---
+      - name: Install dependencies
+        run: pip install google-genai requests pillow
 
-    try:
-        if not GEMINI_KEY:
-            raise Exception("缺少 GEMINI_API_KEY 環境變數")
-        if not IMGBB_KEY:
-            raise Exception("缺少 IMGBB_API_KEY 環境變數")
-            
-        client = genai.Client(api_key=GEMINI_KEY)
-        
-        print("🤖 系統正在隨機抽取城市與主題...")
-        
-        target_cities = [
-            "曼谷", "清邁", "釜山", "首爾", "新加坡", "沖繩", "宮古島", "福岡", 
-            "大阪", "京都", "神戶", "東京", "宇治", "奈良", "香港", "澳門", 
-            "河內", "胡志明市", "峴港", "蘇梅島", "普吉島", "芭達雅", "富國島",
-            "吉隆坡", "濟州島", "札幌", "峇里島", "雅加達", "馬尼拉", "宿霧", 
-            "檳城", "北京", "上海", "廣州", "深圳", "成都", "新德里", "孟買",
-            "巴黎", "倫敦", "羅馬", "馬德里", "巴塞隆納", "阿姆斯特丹", "柏林", 
-            "米蘭", "維也納", "慕尼黑", "威尼斯", "佛羅倫斯", "布拉格", "布達佩斯", 
-            "雅典", "蘇黎世", "日內瓦", "哥本哈根", "斯德哥爾摩", "奧斯陸", "赫爾辛基", 
-            "里斯本", "波多", "都柏林", "愛丁堡", "布魯塞爾", "法蘭克福", "華沙", 
-            "克拉科夫", "尼斯", "里昂", "塞維亞", "瓦倫西亞", "拿坡里", "杜布羅夫尼克", 
-            "斯普利特", "薩爾茨堡", "雷克雅維克", "伊斯坦堡", "安塔利亞", "紐約", 
-            "洛杉磯", "舊金山", "芝加哥", "拉斯維加斯", "邁阿密", "奧蘭多", "華盛頓特區", 
-            "多倫多", "溫哥華", "墨西哥城", "坎昆", "里約熱內盧", "聖保羅", 
-            "布宜諾斯艾利斯", "杜拜", "阿布達比", "多哈", "特拉維夫", "開羅", 
-            "馬拉喀什", "開普敦", "雪梨", "墨爾本", "奧克蘭"
-        ]
-        themes_list = ["必吃在地小吃", "網美打卡咖啡廳", "傳統老店或夜市美食", "高質感特色餐廳", "隱藏版深夜食堂", "人氣排隊甜點"]
-        
-        # 為了跟景點連戲，讀取由景點腳本保留的 city.txt
-        if os.path.exists("city.txt"):
-            with open("city.txt", "r", encoding="utf-8") as f: 
-                selected_city = f.read().strip()
-            print(f"📌 發現保留的 city.txt，繼續使用城市：【{selected_city}】")
-        else:
-            selected_city = random.choice(target_cities)
-            with open("city.txt", "w", encoding="utf-8") as f:
-                f.write(selected_city)
-            print(f"🎲 抽取新城市並寫入 city.txt：【{selected_city}】")
-                
-        themes_str = "、".join(themes_list)
-        print(f"🎯 本次抽中城市：【{selected_city}】，準備交由 Gemini 生成「綜合多元美食主題」...")
-        
-        task_prompt = (
-            f"你是一位經營『Kokko愛旅行』的創作者。你要發一篇貼文。\n"
-            f"1. 請針對【{selected_city}】這個城市，挑選 6 個『不同類型』的真實存在知名餐廳或在地美食（請勿介紹純景點）。\n"
-            f"  💡 【重要】：這 6 間店必須涵蓋多元風格，例如從「{themes_str}」中挑選組合，絕對不要 6 間都是同一種類型，越豐富越好！\n"
-            f"請你生成以下 2 個主要的 JSON 欄位資料，並『嚴格』遵守規則：\n"
-            f"- caption: (主文) 第一人稱發牢騷或表達興奮或專業美食家，用輕鬆口吻簡單盤點這 6 間店。結尾拋出引發討論的問題，並呼籲『收藏這篇』和『看留言區有詳細資訊』。這裡『絕對不要』寫出地址或營業時間,也不要用副詞。480字內。\n"
-            f"  ⚠️【排版與分段要求】：請務必適當分段！段落與段落之間必須使用 '\\n\\n' 換行。不要把所有字擠在一起！\n"
-            f"- restaurants: (這是一個包含 6 個物件的陣列 Array，每個物件代表一間店，需包含以下屬性)\n"
-            f"  - name: (餐廳名稱) 餐廳的精準名稱。\n"
-            f"  - image_prompt: (英文咒語) 請根據該餐廳或招牌菜色的具體畫面撰寫咒語。為了打破 AI 塗抹感並模擬真實手機攝影，『強制』加入以下關鍵字：'Vertical (9:16) aspect ratio, Phone portrait mode, Raw food photograph, unedited, authentic, shot on iPhone 15 Pro, 35mm equivalent lens, Clear, crisp, natural daylight, Realistic and imperfect textures, True-to-life colors, no over-saturation, no HDR look'. 不要使用任何 master piece, 8k 等字眼。\n"
-            f"  - info: (地址與營業時間) 詳細的地址、大約的營業時間或必點推薦。越詳細越好。\n"
-            f"  - google_maps_keyword: (Google Maps搜尋關鍵字) 最容易搜到這間店的關鍵字。\n\n"
-            f"請務必以純 JSON 格式輸出，不要包含任何 Markdown 標記。所有輸出內容（除了 image_prompt 外）必須是全中文。"
-        )
-        
-        res = client.models.generate_content(
-            model='gemini-2.5-flash', 
-            contents=task_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.8
-            )
-        )
-        
-        try:
-            data = json.loads(res.text)
-        except json.JSONDecodeError:
-            print("⚠️ 警告：AI 輸出的不是有效的 JSON！原始輸出如下：")
-            print(res.text)
-            sys.exit(1)
-            
-        raw_caption = data.get("caption", "無法生成主文")
-        caption = raw_caption.replace("\\n", "\n") 
-        restaurants = data.get("restaurants", [])
-        
-        if len(restaurants) < 6:
-            print(f"⚠️ 警告：AI 只有生成 {len(restaurants)} 間餐廳 (預期 6 間)。")
+      - name: Run AI Script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+        run: python daily_food.py
 
-        if len(caption) > 480: caption = caption[:475] + "..."
-        
-        with open("caption.txt", "w", encoding="utf-8") as f: 
-            f.write(caption)
-            
-        print(f"📝 正在建立留言檔 (每 2 間餐廳合併為 1 則)...")
-        # 合併留言邏輯：每 2 間店寫入一個 txt 檔案
-        for i in range(0, len(restaurants), 2):
-            chunk = restaurants[i:i+2]
-            comment_text = ""
-            for j, shop in enumerate(chunk):
-                idx = i + j + 1
-                name = shop.get("name", "未知餐廳")
-                info = shop.get("info", "未知資訊")
-                keyword = shop.get("google_maps_keyword", "未知關鍵字")
-                
-                comment_text += f"✨ 美食 {idx}：{name}\n📍 資訊：{info}\n🗺️ 搜尋：{keyword}\n\n"
-            
-            comment_text = comment_text.strip()
-            if len(comment_text) > 480: comment_text = comment_text[:475] + "..."
-            
-            file_idx = (i // 2) + 1
-            with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
-                f.write(comment_text)
+      - name: Commit to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Auto Update Food Posts (6 Carousel Images, 3 Comments)" || echo "No changes"
+          git pull --rebase origin main || true
+          git push
 
-        img_urls = []
-        
-        for i, shop in enumerate(restaurants):
-            image_prompt = shop.get("image_prompt")
-            name = shop.get("name", "未知餐廳")
-            if not image_prompt:
-                print(f"⚠️ {name} 沒有 image_prompt，跳過生圖。")
-                continue
-                
-            print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
-            try:
-                # ✅ 修正：改回有支援 aspect_ratio 的 gemini-2.5-flash-image 模型
-                img_res = client.models.generate_content(
-                    model='gemini-2.5-flash-image',
-                    contents=image_prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE"],
-                        image_config=types.ImageConfig(aspect_ratio="9:16")
-                    )
-                )
-                
-                for part in img_res.parts:
-                    # 確保圖片資源有成功獲取
-                    if getattr(part, 'inline_data', None) or getattr(part, 'as_image', None):
-                        img_byte_arr = io.BytesIO()
-                        part.as_image().save(img_byte_arr, format='JPEG')
-                        b64_image = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
-                        
-                        imgbb_res = requests.post(
-                            "https://api.imgbb.com/1/upload",
-                            data={"key": IMGBB_KEY, "image": b64_image}
-                        )
-                        imgbb_data = imgbb_res.json()
-                        
-                        if imgbb_res.status_code == 200 and imgbb_data.get("success"):
-                            uploaded_url = imgbb_data["data"]["url"]
-                            print(f"✅ 成功上傳至 ImgBB: {uploaded_url}")
-                            img_urls.append(uploaded_url)
-                        else:
-                            print(f"❌ ImgBB 上傳失敗: {imgbb_res.text}")
-                        break
-                        
-                time.sleep(5)
-                
-            except Exception as e:
-                print(f"💥 生成/上傳 {name} 圖片時發生錯誤：{e}")
-                
-        # 防呆機制：如果全部圖片都失敗，直接終止腳本，不要往後執行
-        if not img_urls:
-            print("\n❌ 錯誤：所有圖片生成或上傳皆失敗！無法建立 img_names.txt，中斷執行。")
-            sys.exit(1)
-            
-        with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
-        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
-            
-        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
+      - name: Post to Threads
+        env:
+          TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+        run: |
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！請檢查 Python 腳本是否成功抓取圖片。"
+            exit 1
+          fi
+          
+          # 將逗號或換行替換為空格，並安全地轉換為陣列
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
+          
+          if [ ${#IMG_ARRAY[@]} -eq 0 ]; then
+            echo "❌ 圖片網址解析失敗，陣列為空！檔案內容: $RAW_CONTENT"
+            exit 1
+          fi
+          
+          CHILDREN=""
+          echo "📤 [Threads] 正在上傳 ${#IMG_ARRAY[@]} 張圖片至暫存區..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$TOKEN")
+            echo "API 回應: $RES"
+            ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            else
+              echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          if [ -z "$CHILDREN" ]; then
+            echo "❌ [Threads] 沒有成功上傳任何圖片，終止發布。"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 [Threads] 正在建立輪播主文容器..."
+          RES_MAIN=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode text@caption.txt -d "access_token=$TOKEN")
+          echo "API 回應: $RES_MAIN"
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id // empty')
+          
+          if [ -z "$MAIN_ID" ]; then
+             echo "❌ [Threads] 建立主文容器失敗！"
+             exit 1
+          fi
+          
+          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理..."
+          for j in {1..20}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status // empty')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [Threads] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              ERR_MSG=$(echo $STATUS_RES | jq -r '.error_message')
+              echo "❌ [Threads] 伺服器處理失敗：$ERR_MSG"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/20)"
+            sleep 10
+          done
+          
+          echo "📤 [Threads] 正在正式發布貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$MAIN_ID&access_token=$TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$POST_ID" ]; then
+             echo "✅ [Threads] 主文發布完成 ID: $POST_ID"
+          else
+             echo "❌ [Threads] 發布貼文失敗！"
+             exit 1
+          fi
+          
+          echo "📤 [Threads] 準備依序發布留言..."
+          for i in {1..3}; do
+            if [ -f "comment${i}.txt" ]; then
+              echo "📤 發布留言 ${i}..."
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$TOKEN" > temp_res.json
+              C_ID=$(cat temp_res.json | jq -r '.id // empty')
+              if [ -n "$C_ID" ]; then
+                  curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$C_ID&access_token=$TOKEN" > /dev/null
+                  echo "✅ 留言 ${i} 發布成功"
+              else
+                  echo "❌ 建立留言 ${i} 容器失敗，回應: $(cat temp_res.json)"
+              fi
+              sleep 15
+            fi
+          done
 
-    except Exception as e:
-        print(f"💥 發生嚴重錯誤：{e}")
-        sys.exit(1)
+      - name: Post to Instagram (Carousel)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
+        run: |
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！"
+            exit 1
+          fi
+          
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
+          CHILDREN=""
+          
+          echo "📤 [IG] 正在上傳 ${#IMG_ARRAY[@]} 張圖片至暫存區..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
+            echo "API 回應: $RES"
+            ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$ID" ]; then
+              CHILDREN="${CHILDREN}${ID},"
+            else
+               echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          CHILDREN=${CHILDREN%,}
+          
+          if [ -z "$CHILDREN" ]; then
+            echo "❌ [IG] 沒有成功上傳任何圖片，終止發布。"
+            exit 1
+          fi
+          
+          sleep 5
+          echo "📤 [IG] 正在建立輪播主文容器..."
+          RES_MAIN=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "media_type=CAROUSEL" -d "children=$CHILDREN" --data-urlencode caption@caption.txt -d "access_token=$META_TOKEN")
+          echo "API 回應: $RES_MAIN"
+          MAIN_ID=$(echo $RES_MAIN | jq -r '.id // empty')
+          
+          if [ -z "$MAIN_ID" ]; then
+             echo "❌ [IG] 建立主文容器失敗！"
+             exit 1
+          fi
+          
+          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理..."
+          for j in {1..20}; do
+            STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
+            STATUS=$(echo $STATUS_RES | jq -r '.status_code // empty')
+            if [ "$STATUS" == "FINISHED" ]; then
+              echo "✅ [IG] 伺服器處理完成！準備發布！"
+              break
+            fi
+            if [ "$STATUS" == "ERROR" ]; then
+              echo "❌ [IG] 伺服器處理失敗！回應: $STATUS_RES"
+              exit 1
+            fi
+            echo "⏳ 處理中 (目前狀態: $STATUS)... 等待 10 秒後重試 ($j/20)"
+            sleep 10
+          done
+          
+          echo "📤 [IG] 正在正式發布貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media_publish" -d "creation_id=$MAIN_ID" -d "access_token=$META_TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          IG_POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$IG_POST_ID" ]; then
+            echo "✅ [IG] 主文發布完成 ID: $IG_POST_ID"
+            echo "📤 [IG] 準備依序發布留言..."
+            for i in {1..3}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [IG] 發布留言 ${i}..."
+                COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
+                echo "API 回應: $COMMENT_RES"
+                sleep 15
+              fi
+            done
+            echo "✅ [IG] 留言發佈完成！"
+          else
+            echo "❌ [IG] 發布貼文失敗，找不到主文 ID。"
+            exit 1
+          fi
 
-if __name__ == "__main__":
-    run()
+      - name: Post to Facebook Page (Multi-Photo)
+        env:
+          META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+        run: |
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！"
+            exit 1
+          fi
+          
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
+          ATTACHED_MEDIA="["
+          
+          echo "📤 [FB] 正在上傳未公開的照片..."
+          for img_url in "${IMG_ARRAY[@]}"; do
+            echo "上傳圖片: $img_url"
+            RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/photos" -d "url=$img_url" -d "published=false" -d "access_token=$META_TOKEN")
+            echo "API 回應: $RES"
+            PHOTO_ID=$(echo $RES | jq -r '.id // empty')
+            if [ -n "$PHOTO_ID" ]; then
+              ATTACHED_MEDIA+="{\"media_fbid\":\"$PHOTO_ID\"},"
+            else
+              echo "❌ 獲取圖片 ID 失敗！"
+            fi
+          done
+          ATTACHED_MEDIA=${ATTACHED_MEDIA%,}"]"
+          
+          if [ "$ATTACHED_MEDIA" == "]" ]; then
+             echo "❌ [FB] 沒有成功上傳任何圖片，終止發布。"
+             exit 1
+          fi
+          
+          echo "📤 [FB] 正在發布多圖貼文..."
+          PUBLISH_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_PAGE_ID/feed" --data-urlencode message@caption.txt -d "attached_media=$ATTACHED_MEDIA" -d "access_token=$META_TOKEN")
+          echo "API 回應: $PUBLISH_RES"
+          FB_POST_ID=$(echo $PUBLISH_RES | jq -r '.id // empty')
+          
+          if [ -n "$FB_POST_ID" ]; then
+            echo "✅ [FB] 主文發布完成 ID: $FB_POST_ID"
+            echo "📤 [FB] 準備依序發布留言..."
+            for i in {1..3}; do
+              if [ -f "comment${i}.txt" ]; then
+                echo "📤 [FB] 發布留言 ${i}..."
+                COMMENT_RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$FB_POST_ID/comments" --data-urlencode message@comment${i}.txt -d "access_token=$META_TOKEN")
+                echo "API 回應: $COMMENT_RES"
+                sleep 15
+              fi
+            done
+            echo "✅ [FB] 留言發佈完成！"
+          else
+            echo "❌ [FB] 發布貼文失敗，找不到主文 ID。"
+            exit 1
+          fi
