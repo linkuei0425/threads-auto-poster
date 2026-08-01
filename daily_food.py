@@ -3,10 +3,14 @@ import sys
 import time
 import json
 import random
+import base64
+import requests
+import io
 from google import genai
 from google.genai import types
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+IMGBB_KEY = os.getenv("IMGBB_API_KEY")
 
 def run():
     # --- 🛡️ 防噴錢機制開始 🛡️ ---
@@ -20,6 +24,8 @@ def run():
     try:
         if not GEMINI_KEY:
             raise Exception("缺少 GEMINI_API_KEY 環境變數")
+        if not IMGBB_KEY:
+            raise Exception("缺少 IMGBB_API_KEY 環境變數")
             
         client = genai.Client(api_key=GEMINI_KEY)
         
@@ -121,13 +127,7 @@ def run():
             with open(f"comment{file_idx}.txt", "w", encoding="utf-8") as f:
                 f.write(comment_text)
 
-        # 注意：美食圖片存入 images/food
-        img_dir = "images/food"
-        if os.path.exists(img_dir) and not os.path.isdir(img_dir):
-            os.remove(img_dir)
-        os.makedirs(img_dir, exist_ok=True)
-        
-        img_names = []
+        img_urls = []
         
         for i, shop in enumerate(restaurants):
             image_prompt = shop.get("image_prompt")
@@ -147,26 +147,38 @@ def run():
                     )
                 )
                 
-                img_name = f"food_{int(time.time())}_{i}.jpg"
-                local_img_path = f"{img_dir}/{img_name}"
-                
                 for part in img_res.parts:
                     if part.inline_data:
-                        part.as_image().save(local_img_path)
-                        img_names.append(img_name)
+                        # 🚀 將圖片轉為記憶體中的 Bytes，直接上傳至 ImgBB，不儲存在本機端
+                        img_byte_arr = io.BytesIO()
+                        part.as_image().save(img_byte_arr, format='JPEG')
+                        b64_image = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                        
+                        imgbb_res = requests.post(
+                            "https://api.imgbb.com/1/upload",
+                            data={"key": IMGBB_KEY, "image": b64_image}
+                        )
+                        imgbb_data = imgbb_res.json()
+                        
+                        if imgbb_res.status_code == 200 and imgbb_data.get("success"):
+                            uploaded_url = imgbb_data["data"]["url"]
+                            print(f"✅ 成功上傳至 ImgBB: {uploaded_url}")
+                            img_urls.append(uploaded_url)
+                        else:
+                            print(f"❌ ImgBB 上傳失敗: {imgbb_res.text}")
                         break
                         
                 time.sleep(5)
                 
             except Exception as e:
-                print(f"💥 生成 {name} 圖片時發生錯誤：{e}")
+                print(f"💥 生成/上傳 {name} 圖片時發生錯誤：{e}")
                 
-        if img_names:
-            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_names[0])
+        if img_urls:
+            with open("img_name.txt", "w", encoding="utf-8") as f: f.write(img_urls[0])
             
-        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_names))
+        with open("img_names.txt", "w", encoding="utf-8") as f: f.write(",".join(img_urls))
             
-        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出 {len(img_names)} 張圖片")
+        print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
 
     except Exception as e:
         print(f"💥 發生嚴重錯誤：{e}")
