@@ -5,7 +5,6 @@ import json
 import random
 import base64
 import requests
-import io
 from google import genai
 from google.genai import types
 
@@ -142,7 +141,6 @@ def run():
             print(f"🎨 [{i+1}/{len(restaurants)}] 正在以極致寫實 iPhone 15 Pro 風格繪製：{name}...")
             
             try:
-                # ✅ 正確使用支援 aspect_ratio 的 gemini-2.5-flash-image 模型
                 img_res = client.models.generate_content(
                     model='gemini-2.5-flash-image',
                     contents=image_prompt,
@@ -153,11 +151,9 @@ def run():
                 )
                 
                 for part in img_res.parts:
-                    # 確保圖片資源有成功獲取
-                    if getattr(part, 'inline_data', None) or getattr(part, 'as_image', None):
-                        img_byte_arr = io.BytesIO()
-                        part.as_image().save(img_byte_arr, format='JPEG')
-                        b64_image = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+                    if part.inline_data:
+                        # 🚀 修正：直接抓取 API 回傳的圖片原始二進位資料，避開 as_image().save() 的參數問題
+                        b64_image = base64.b64encode(part.inline_data.data).decode('utf-8')
                         
                         imgbb_res = requests.post(
                             "https://api.imgbb.com/1/upload",
