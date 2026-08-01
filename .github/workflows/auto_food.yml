@@ -42,11 +42,23 @@ jobs:
         env:
           TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
         run: |
-          IMG_URLS=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
-          CHILDREN=""
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！請檢查 Python 腳本是否成功抓取圖片。"
+            exit 1
+          fi
           
-          echo "📤 [Threads] 正在上傳 6 張圖片至暫存區..."
+          # 將逗號或換行替換為空格，並安全地轉換為陣列
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
+          
+          if [ ${#IMG_ARRAY[@]} -eq 0 ]; then
+            echo "❌ 圖片網址解析失敗，陣列為空！檔案內容: $RAW_CONTENT"
+            exit 1
+          fi
+          
+          CHILDREN=""
+          echo "📤 [Threads] 正在上傳 ${#IMG_ARRAY[@]} 張圖片至暫存區..."
           for img_url in "${IMG_ARRAY[@]}"; do
             echo "上傳圖片: $img_url"
             RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" -d "media_type=IMAGE" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$TOKEN")
@@ -76,7 +88,7 @@ jobs:
              exit 1
           fi
           
-          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
+          echo "⏳ [Threads] 正在等待 Meta 伺服器轉檔處理..."
           for j in {1..20}; do
             STATUS_RES=$(curl -s -X GET "https://graph.threads.net/v1.0/$MAIN_ID?fields=status,error_message&access_token=$TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status // empty')
@@ -105,7 +117,7 @@ jobs:
              exit 1
           fi
           
-          echo "📤 [Threads] 準備依序發布 3 則留言..."
+          echo "📤 [Threads] 準備依序發布留言..."
           for i in {1..3}; do
             if [ -f "comment${i}.txt" ]; then
               echo "📤 發布留言 ${i}..."
@@ -126,11 +138,17 @@ jobs:
           META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           IG_ID: ${{ secrets.IG_ACCOUNT_ID }}
         run: |
-          IMG_URLS=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！"
+            exit 1
+          fi
+          
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
           CHILDREN=""
           
-          echo "📤 [IG] 正在上傳 6 張圖片至暫存區..."
+          echo "📤 [IG] 正在上傳 ${#IMG_ARRAY[@]} 張圖片至暫存區..."
           for img_url in "${IMG_ARRAY[@]}"; do
             echo "上傳圖片: $img_url"
             RES=$(curl -s -X POST "https://graph.facebook.com/v20.0/$IG_ID/media" -d "image_url=$img_url" -d "is_carousel_item=true" -d "access_token=$META_TOKEN")
@@ -160,7 +178,7 @@ jobs:
              exit 1
           fi
           
-          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理 6 張圖片..."
+          echo "⏳ [IG] 正在等待 Meta 伺服器轉檔處理..."
           for j in {1..20}; do
             STATUS_RES=$(curl -s -X GET "https://graph.facebook.com/v20.0/$MAIN_ID?fields=status_code&access_token=$META_TOKEN")
             STATUS=$(echo $STATUS_RES | jq -r '.status_code // empty')
@@ -203,8 +221,14 @@ jobs:
           META_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
         run: |
-          IMG_URLS=$(cat img_names.txt)
-          IFS=',' read -r -a IMG_ARRAY <<< "$IMG_URLS"
+          if [ ! -s img_names.txt ]; then
+            echo "❌ img_names.txt 不存在或為空！"
+            exit 1
+          fi
+          
+          RAW_CONTENT=$(cat img_names.txt)
+          URLS_FORMATTED=$(echo "$RAW_CONTENT" | tr ',' ' ' | tr '\n' ' ')
+          IMG_ARRAY=($URLS_FORMATTED)
           ATTACHED_MEDIA="["
           
           echo "📤 [FB] 正在上傳未公開的照片..."
