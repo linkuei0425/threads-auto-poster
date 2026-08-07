@@ -201,6 +201,12 @@ def run():
             
         print(f"\n👉 檔案寫入完成：主文({len(caption)}字) / 產出並上傳 {len(img_urls)} 張圖片")
 
+        # --- 🚀 加入這段來清除城市紀錄，讓下次重新抽籤 ---
+        if os.path.exists("city.txt"):
+            os.remove("city.txt")
+            print("🗑️ 已完成美食連戲，刪除 city.txt！下次將重新抽取新城市。")
+        # ------------------------------------------------
+
     except Exception as e:
         print(f"💥 發生嚴重錯誤：{e}")
         sys.exit(1)
