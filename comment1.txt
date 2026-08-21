@@ -1,7 +1,7 @@
-✨ 美食 1：In-N-Out Burger
-📍 資訊：洛杉磯有多間分店。招牌必點：Double-Double漢堡（推薦Animal Style）、薯條（推薦Animal Style）。營業時間通常為上午10:30至凌晨1:00（週五、六至凌晨1:30）。
-🗺️ 搜尋：In-N-Out Burger Los Angeles
+✨ 景點 1：熊布朗宮
+🚆 交通：搭乘地鐵U4線至Schönbrunn站，出站後依照指標步行約5分鐘即可抵達宮殿入口。
+🗺️ 搜尋：熊布朗宮
 
-✨ 美食 2：Alfred Coffee
-📍 資訊：洛杉磯有多間分店，例如 Melrose Place 店：8428 Melrose Pl, Los Angeles, CA 90069。營業時間通常為上午7:00至下午6:00。推薦必點：Alfred Coffee招牌拿鐵。
-🗺️ 搜尋：Alfred Coffee Melrose Place
+✨ 景點 2：聖史蒂芬大教堂
+🚆 交通：搭乘地鐵U1或U3線至Stephansplatz站，出站即是教堂廣場。
+🗺️ 搜尋：聖史蒂芬大教堂
