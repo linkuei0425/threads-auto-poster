@@ -106,20 +106,14 @@ jobs:
           echo "📤 [Threads] 準備依序發布 4 則交通資訊留言..."
           for i in {1..4}; do
             if [ -f "comment${i}.txt" ]; then
-              echo "📤 [Threads] 正在建立留言 ${i} 容器..."
-              COMMENT_RES=$(curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$CLEAN_TOKEN")
-              COMMENT_ID=$(echo $COMMENT_RES | jq -r '.id')
-              
-              if [ "$COMMENT_ID" != "null" ] && [ -n "$COMMENT_ID" ]; then
-                sleep 3
-                curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$CLEAN_TOKEN" > /dev/null
-                echo "✅ [Threads] 留言 $i 發布成功"
-              else
-                echo "⚠️ [Threads] 留言 $i 建立失敗，Meta 回傳：$COMMENT_RES"
-              fi
-              sleep 10
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads" --data-urlencode "media_type=TEXT" --data-urlencode text@comment${i}.txt --data-urlencode "reply_to_id=$POST_ID" --data-urlencode "access_token=$CLEAN_TOKEN" > temp_res.json
+              COMMENT_ID=$(cat temp_res.json | jq -r '.id')
+              curl -s -X POST "https://graph.threads.net/v1.0/me/threads_publish?creation_id=$COMMENT_ID&access_token=$CLEAN_TOKEN" > /dev/null
+              echo "✅ [Threads] 留言 $i 發布成功"
+              sleep 25
             fi
           done
+         
 
       - name: Post to Instagram (Carousel)
         env:
